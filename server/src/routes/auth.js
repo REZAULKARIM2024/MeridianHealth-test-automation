@@ -19,6 +19,11 @@ function sign(user) {
 router.post("/signup", asyncHandler(async (req, res) => {
   const { name, email, password } = req.body || {};
   if (!name?.trim()) return res.status(400).json({ error: "Enter your full name." });
+  // users.name is VARCHAR(120) in the schema — check this before hitting the
+  // database, so a too-long name gets a clean 400 instead of falling through
+  // to a raw 500 from MySQL's ER_DATA_TOO_LONG (found via live testing, see
+  // FORM_VALIDATION_REPORT.md).
+  if (name.trim().length > 120) return res.status(400).json({ error: "Name must be 120 characters or fewer." });
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
   if (!password || password.length < 8) return res.status(400).json({ error: "Use at least 8 characters." });
 
