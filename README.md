@@ -7,8 +7,8 @@ app-lifecycle behavior. Built end-to-end as a QA automation portfolio piece: not
 tests bolted onto someone else's app, but the app, the database schema, the API, and
 the test suite all built and debugged together, including a real production bug (a
 server crash under error conditions), a genuine CI-only Playwright/DOM race condition,
-and a real UX gap in how the app handles browser navigation — all found and fixed or
-documented along the way.
+a real UX gap in browser navigation, and a real input-validation bug — all found,
+root-caused, and either fixed with a regression test or documented along the way.
 
 ![React](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-61DAFB?logo=react&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Styling-Tailwind%20CSS-38BDF8?logo=tailwindcss&logoColor=white)
@@ -41,6 +41,7 @@ prescription item to the pharmacy cart, and getting matched to a clinical trial,
 - [Project Structure](#project-structure)
 - [Database Overview](#database-overview)
 - [Testing](#testing)
+- [Form Validation Report](#form-validation-report)
 - [Test Reporting (Allure)](#test-reporting-allure)
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Test Automation Design Notes](#test-automation-design-notes)
@@ -58,12 +59,14 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **73 automated
+The point of the project is the QA process as much as the app itself: **75 automated
 Playwright tests across 12 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
-running green in CI on every push. A real production bug, a real CI-only flake, and a
-real UX gap were all root-caused and fixed or documented rather than papered over (see
-[Known Issues & QA Findings](#known-issues--qa-findings)).
+running green in CI on every push. A real production bug, a real CI-only flake, a real
+UX gap, and a real input-validation bug were all root-caused and fixed — with
+regression tests checked in for each — rather than papered over (see
+[Known Issues & QA Findings](#known-issues--qa-findings) and the standalone
+[Form Validation Report](#form-validation-report)).
 
 ## Architecture
 
@@ -86,7 +89,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 73 tests / 12 spec files"]
+    subgraph Tests["Test Automation — 75 tests / 12 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -121,8 +124,11 @@ flowchart TB
 - Every route wrapped in an `asyncHandler` so a database error becomes a clean `500`
   JSON response instead of crashing the whole Node process — found during automation
   runs when a real error (bad DB credentials) was taking down the entire server and
-  failing every subsequent test in the run, not just the one that hit the error. See
-  [Known Issues & QA Findings](#known-issues--qa-findings).
+  failing every subsequent test in the run, not just the one that hit the error.
+- `auth.js` validates `name` length (≤120 chars) before it ever reaches the database —
+  found via live testing that a too-long name previously fell through to a raw
+  `500` (`ER_DATA_TOO_LONG`) instead of a clean `400`. See
+  [Form Validation Report](#form-validation-report).
 - Process-level `unhandledRejection` / `uncaughtException` listeners as a second line
   of defense on top of the per-route wrapper.
 
@@ -227,8 +233,7 @@ This adds:
 
 All three files use `INSERT IGNORE`, so they're safe to re-run without creating
 duplicates. Every row was validated by actually running the SQL against a real MySQL
-instance and checking row counts/uniqueness before being committed — not just
-generated and assumed correct.
+instance and checking row counts/uniqueness before being committed.
 
 **Note:** `medical_tests` is currently data-only — there's no app UI or API route for
 it yet (no "Tests" tab, no booking flow). It's ready for that feature to be built on
@@ -256,7 +261,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 73 tests / 12 files
+  tests/                     Playwright spec files (TypeScript), 75 tests / 12 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -264,6 +269,7 @@ meridian-tests/
   run-tests.bat              one-click Windows setup + test runner
   vite.config.js             dev + preview proxy: /api -> localhost:4000
   .github/workflows/ci.yml   GitHub Actions pipeline
+  FORM_VALIDATION_REPORT.md  senior-QA-level form validation review, live-verified
 ```
 
 ## Database Overview
@@ -290,7 +296,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**73 tests across 12 spec files, currently 100% passing in CI:**
+**75 tests across 12 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -302,7 +308,7 @@ first-request compile latency as a source of flaky timing.
 | `navigation.spec.ts` | Tab routing, back navigation, mobile/desktop layouts |
 | `accessibility.spec.ts` | Keyboard navigation, accessible names, focus visibility |
 | `performance_and_device.spec.ts` | Load time budget, network-drop tolerance, data reset |
-| `api.spec.ts` | Direct HTTP tests against the real backend — no browser (signup, login, doctors, medicines, booking, trial matching) |
+| `api.spec.ts` | Direct HTTP tests against the real backend — signup/login/doctors/medicines/booking/trial matching, plus the `name`-length boundary (`API-11`/`API-12`) |
 | `security.spec.ts` | Unauthorized access, tampered/forged JWTs, SQL-injection and XSS safety |
 | `lifecycle.spec.ts` | Session behavior across a reload; browser Back/Forward and tab-visibility "interrupt" tests |
 | `debug-booking.spec.ts` | A diagnostic spec (network/console dump) used during development to isolate a timing issue in the booking flow — kept in the suite as a template for future debugging |
@@ -318,6 +324,16 @@ Config highlights (`playwright.config.ts`):
   load.
 - `reporter: [["html"], ["allure-playwright"], ["list"]]` — HTML report for local runs,
   Allure results for the richer CI report (see below).
+
+## Form Validation Report
+
+[`FORM_VALIDATION_REPORT.md`](./FORM_VALIDATION_REPORT.md) is a standalone,
+senior-QA-level review of every form in the app — signup/login, booking, pharmacy
+checkout, and trial matching — comparing client-side and server-side validation rule
+by rule, field by field. Every claim in it was verified by actually running the real
+server against a live MySQL instance and issuing real HTTP requests, not inferred from
+reading the code alone. It's what surfaced the `name`-length bug documented below and
+in `API-11`/`API-12`.
 
 ## Test Reporting (Allure)
 
@@ -344,7 +360,7 @@ CI generates and uploads this same report as a build artifact on every push — 
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs Playwright's Chromium browser.
-5. Runs the full 73-test suite against a production build (`npm run test:e2e --
+5. Runs the full 75-test suite against a production build (`npm run test:e2e --
    --project=chromium`).
 6. Uploads three artifacts, even on failure: the Playwright HTML report, raw
    `test-results/` (screenshots, traces, `error-context.md` per failure — this is what
@@ -354,9 +370,7 @@ CI generates and uploads this same report as a build artifact on every push — 
 The badge at the top of this README reflects the latest run. A full CI run — including
 spinning up MySQL from scratch — currently completes in 2–3 minutes, compared to
 highly variable (1.5 minutes to over an hour) local run times on some Windows machines,
-which is what motivated setting this up in the first place: it turned a debugging
-environment with too many uncontrolled variables (antivirus scanning, background sync
-clients, local MySQL state) into a clean, reproducible one.
+which is what motivated setting this up in the first place.
 
 ## Test Automation Design Notes
 
@@ -365,25 +379,26 @@ thing worth knowing about rather than hiding:
 
 - **`asyncHandler` on every route** (`server/src/asyncHandler.js`) — Express 4 doesn't
   catch rejected promises from `async` route handlers automatically. Without this
-  wrapper, a single failed query (e.g. a transient DB hiccup) becomes an unhandled
-  promise rejection that can crash the entire Node process — taking down *every*
-  in-flight request, not just the one that failed. This was caught by watching the
-  entire suite fail in a cascade after one bad request, not by a single test failure.
-- **`aria-pressed` on time-slot buttons** — added both for real accessibility value and
-  because it gives the booking Page Object a genuine state signal ("is this slot really
-  selected yet?") to wait on before clicking "Book", instead of guessing with a fixed
+  wrapper, a single failed query becomes an unhandled promise rejection that can crash
+  the entire Node process — taking down *every* in-flight request, not just the one
+  that failed.
+- **`aria-pressed` on time-slot buttons** — gives the booking Page Object a genuine
+  state signal to wait on before clicking "Book", instead of guessing with a fixed
   delay.
-- **Production build for tests, not the dev server** — `vite build` runs once before
-  the suite via the `pretest:e2e` npm hook, and Playwright's `webServer` serves that
-  build with `vite preview`. Running against the dev server caused real, reproducible
-  timeouts on the first test or two per file, from Vite's on-demand module compilation.
+- **Production build for tests, not the dev server** — removes first-request compile
+  latency as a source of flaky timing.
 - **Text-based DOM waits instead of `getByTestId(...).toBeVisible()` for post-async
-  content** — see the CI-only race condition writeup below; this is the concrete fix
-  and the reasoning for it.
+  content** — see the CI-only race condition writeup below.
 - **Direct HTTP tests via Playwright's `request` fixture** (`api.spec.ts`,
   `security.spec.ts`) — a UI test can pass because the app quietly hides a bad API
   response; asserting on raw status codes and JSON shape directly catches things a
-  browser-driven test wouldn't.
+  browser-driven test wouldn't. This is exactly how `API-11`/`API-12` caught and now
+  guard the `name`-length bug.
+- **Fix-then-test loop, not just documentation:** the `name`-length finding
+  (see [Form Validation Report](#form-validation-report)) went through the full
+  cycle — found live, fixed in `auth.js`, re-verified live at the exact boundary
+  (120 passes, 121 fails cleanly), then checked in as a permanent regression test —
+  rather than being left as a comment or a report entry with no enforcement.
 
 ## Known Issues & QA Findings
 
@@ -394,29 +409,27 @@ Documented rather than hidden, as any real QA process would:
   booking confirmation card, the pharmacy medicine catalog, and search-filtered
   results) all exhibited the same symptom in GitHub Actions: a CI accessibility
   snapshot captured at the exact moment of a timeout showed the correct content
-  genuinely rendered on screen (e.g. "Appointment confirmed" / "Dr. Amara Osei · 9:00
-  AM", or "Amoxicillin 500mg $12.50"), while `getByTestId(...)` still reported
-  "element(s) not found" — even when checking the raw DOM directly via
-  `document.querySelector` inside `page.waitForFunction`. Switching those specific
-  waits to search the actual rendered *text* instead of the `data-testid` attribute
-  (via a `TreeWalker` over text nodes, checking `getClientRects().length > 0` on the
-  parent) resolved every instance. This was never reproducible locally — only in
-  GitHub Actions' headless Chromium — which is itself a useful data point about why
-  CI-only flakes deserve their own investigation rather than being dismissed as "works
-  on my machine." Root-caused using the raw `test-results/error-context.md` artifacts
-  (accessibility snapshot + exact locator + exact timeout) rather than guesswork.
+  genuinely rendered on screen, while `getByTestId(...)` still reported "element(s)
+  not found." Switching those specific waits to search the actual rendered *text*
+  instead of the `data-testid` attribute (via a `TreeWalker` over text nodes)
+  resolved every instance. Never reproducible locally — only in GitHub Actions'
+  headless Chromium.
 - **Documented — the app doesn't push browser history state (`INT-01`,
   `tests/lifecycle.spec.ts`).** Since the app manages all navigation via React state
   rather than `pushState`/client-side routing, the browser's history has exactly one
-  entry after the initial load. Pressing the browser's **Back** button mid-flow doesn't
-  return to a "previous screen" within the app — a CI screenshot captured at the
-  moment of the original (incorrect) assertion showed a completely blank page,
-  confirming the whole React app had unmounted. Pressing **Forward** afterward
-  triggers a fresh reload rather than restoring state, landing back on the login
-  screen (consistent with the no-session-persistence finding in `LFC-01`). This is a
-  real, minor UX gap worth fixing in the app itself (e.g. adopting a router that
-  reflects screens in the URL) — the test now documents the actual behavior rather
-  than asserting the originally-assumed, incorrect one.
+  entry after the initial load. Pressing **Back** mid-flow unmounts the whole app
+  (confirmed via a blank CI screenshot); pressing **Forward** afterward triggers a
+  fresh reload, landing back on the login screen. A real, minor UX gap worth fixing
+  by adopting client-side routing.
+- **Resolved — `users.name` accepted input beyond its `VARCHAR(120)` limit and
+  crashed with a raw 500 instead of a clean validation error.** Found via live
+  testing in the [Form Validation Report](#form-validation-report): a 500-character
+  name reached MySQL uncaught, which threw `ER_DATA_TOO_LONG`, which `asyncHandler`
+  turned into a generic `{"error":"Something went wrong."}` 500 — confusing for a
+  user who just pasted a long string by accident. Fixed by checking
+  `name.trim().length > 120` in `auth.js` before the database call; boundary-tested
+  live (120 succeeds, 121 fails cleanly with a proper 400) and checked in as
+  `API-11`/`API-12`.
 
 ## Roadmap
 
@@ -426,6 +439,8 @@ Documented rather than hidden, as any real QA process would:
   content in GitHub Actions' headless Chromium (a genuine open question — the fix
   above works reliably, but the underlying browser/Playwright-version interaction
   isn't fully explained yet)
+- Apply the same "live-test every form field" pass from the Form Validation Report to
+  any new forms added in the future, before they ship
 - Build an actual UI/API feature on top of the new `medical_tests` data (a "Tests" tab,
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
