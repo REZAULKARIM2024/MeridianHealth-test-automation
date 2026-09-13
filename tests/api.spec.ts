@@ -104,4 +104,28 @@ test.describe("API-integrated", () => {
     const res = await request.get("/api/trials/match?age=200&condition=diabetes");
     expect(res.status()).toBe(400);
   });
+
+  test("API-11 signup rejects a name over 120 characters with a clean 400", async ({ request }) => {
+    // users.name is VARCHAR(120) in the schema. Before this test's underlying
+    // fix (see FORM_VALIDATION_REPORT.md), a too-long name reached MySQL
+    // uncaught and came back as a raw 500 (ER_DATA_TOO_LONG) instead of a
+    // proper validation error — found via live testing, not assumed.
+    const email = uniqueEmail("api-longname");
+    const tooLong = "A".repeat(121);
+    const res = await request.post("/api/auth/signup", {
+      data: { name: tooLong, email, password: "SecurePass1" },
+    });
+    expect(res.status()).toBe(400);
+    const body = await res.json();
+    expect(body.error).toMatch(/120 characters/);
+  });
+
+  test("API-12 signup accepts a name at exactly the 120-character boundary", async ({ request }) => {
+    const email = uniqueEmail("api-boundaryname");
+    const exactly120 = "B".repeat(120);
+    const res = await request.post("/api/auth/signup", {
+      data: { name: exactly120, email, password: "SecurePass1" },
+    });
+    expect(res.status()).toBe(201);
+  });
 });
