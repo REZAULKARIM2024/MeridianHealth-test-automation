@@ -37,40 +37,27 @@ test.describe("App Lifecycle", () => {
 });
 
 test.describe("Interrupt (web-equivalent)", () => {
-  test("INT-01 browser back button mid-booking navigates away, since the app never pushes history state", async ({ page }) => {
+   test("INT-01 the app never pushes browser history state, so Back/Forward cannot step through screens", async ({ page }) => {
     const auth = new AuthPage(page);
     const nav = new NavPage(page);
     await auth.goto();
     await auth.signup("Interrupt User", uniqueEmail("interrupt"), "SecurePass1");
+    const before = await page.evaluate(() => history.length);
+
     await nav.book.click();
     await page.getByTestId("doctor-d1").click();
     await expect(page.getByTestId("slot-900AM")).toBeVisible();
 
-    await page.goBack();
-
-    // GENUINE FINDING, not a test bug: this app is a single-page state
-    // machine that never calls pushState/uses client-side routing, so the
-    // browser's history has exactly one entry (the initial load). Pressing
-    // Back from here doesn't return to a "previous screen" within the
-    // app — it navigates to whatever preceded that one entry (a blank
-    // page in a fresh browser context), and the React app unmounts
-    // entirely. Confirmed via a blank screenshot at the moment of
-    // failure when this test originally asserted the app stayed usable.
-    // Documented here rather than papered over — see README "Known
-    // Issues & QA Findings".
-    const appGone =
-      (await page.getByTestId("doctor-d1").isVisible().catch(() => false)) === false &&
-      (await page.getByTestId("slot-900AM").isVisible().catch(() => false)) === false;
-    expect(appGone).toBe(true);
-
-    // Forward re-enters the app the same way Back left it: as a fresh
-    // navigation, not a restored in-app state. Consistent with LFC-01's
-    // finding (no session persistence across a reload), this lands back
-    // on the login screen, not mid-booking.
-    await page.goForward();
-    await expect(page.getByTestId("tab-login")).toBeVisible();
+    // GENUINE FINDING: the app is a single-page state machine that never
+    // calls pushState, so moving between screens adds no history entries
+    // and history.state stays empty. Back cannot return to a previous
+    // screen; it leaves the app. Asserting the root cause (not the
+    // engine-specific result of goBack) keeps this identical across
+    // Chromium, Firefox and WebKit.
+    const after = await page.evaluate(() => ({ length: history.length, state: history.state }));
+    expect(after.length).toBe(before);
+    expect(after.state).toBeNull();
   });
-
   test("INT-02 tab losing and regaining visibility mid-flow doesn't lose in-progress state", async ({ page }) => {
     const auth = new AuthPage(page);
     const nav = new NavPage(page);
