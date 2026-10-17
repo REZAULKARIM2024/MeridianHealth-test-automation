@@ -6,10 +6,18 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   e2e:
+    name: e2e (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
 
     services:
       mysql:
@@ -68,36 +76,103 @@ jobs:
       - name: Initialize database schema + seed data
         run: npm run db:init --prefix server
 
-      - name: Install Playwright's Chromium browser
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright's ${{ matrix.browser }} browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Run the Playwright test suite
-        run: npm run test:e2e -- --project=chromium
+      - name: Run the Playwright test suite (${{ matrix.browser }})
+        run: npm run test:e2e -- --project=${{ matrix.browser }}
 
-      - name: Upload Playwright HTML report
+      - name: Upload Playwright HTML report (includes traces)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.browser }}
           path: playwright-report/
           retention-days: 14
+
+      - name: Upload raw Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-${{ matrix.browser }}
+          path: allure-results/
+          retention-days: 14
+          if-no-files-found: warn
 
       - name: Upload traces/screenshots on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: test-results
+          name: test-results-${{ matrix.browser }}
           path: test-results/
           retention-days: 14
 
-      - name: Generate Allure report
-        if: always()
-        run: npx allure generate ./allure-results --clean -o ./allure-report
+  report:
+    name: Publish combined reports
+    needs: e2e
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
 
-      - name: Upload Allure report
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          name: allure-report
-          path: allure-report/
-          retention-days: 14
+          node-version: 20
+
+      - name: Download Allure results (all browsers)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-*
+          path: allure-results-all
+
+      - name: Download Playwright HTML reports (all browsers)
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-*
+          path: pw-reports
+
+      - name: Build combined Allure report + site
+        run: |
+          mkdir -p site/playwright
+          if ls allure-results-all/*/ >/dev/null 2>&1; then
+            npx --yes allure-commandline@2.29.0 generate allure-results-all/* --clean -o site
+          else
+            echo "No Allure results found" > site/index.html
+          fi
+          for d in pw-reports/playwright-report-*; do
+            [ -d "$d" ] || continue
+            b="${d##*playwright-report-}"
+            mkdir -p "site/playwright/$b"
+            cp -r "$d"/. "site/playwright/$b/"
+          done
+          touch site/.nojekyll
+
+      - name: Publish to GitHub Pages (main only)
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
+
+      - name: Report links
+        if: always()
+        run: |
+          OWNER="${GITHUB_REPOSITORY%%/*}"; REPO="${GITHUB_REPOSITORY##*/}"
+          BASE="https://${OWNER,,}.github.io/${REPO}"
+          {
+            echo "## Test reports"
+            if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+              echo "- Combined Allure report (Chromium + Firefox + WebKit): ${BASE}/"
+              echo "- Playwright report + traces: [Chromium](${BASE}/playwright/chromium/) · [Firefox](${BASE}/playwright/firefox/) · [WebKit](${BASE}/playwright/webkit/)"
+              echo ""
+              echo "_Pages updates a minute or so after this job ends._"
+            else
+              echo "Pull-request/branch runs are not published to Pages. Download the playwright-report-BROWSER artifacts from this run and open them (traces included)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
