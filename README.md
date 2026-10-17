@@ -19,6 +19,8 @@ root-caused, and either fixed with a regression test or documented along the way
 ![Allure](https://img.shields.io/badge/Reporting-Allure-FF6C37)
 ![Cypress](https://img.shields.io/badge/Also%20includes-Cypress%20example-17202C?logo=cypress&logoColor=white)
 [![CI](https://github.com/REZAULKARIM2024/MeridianHealth-test-automation/actions/workflows/ci.yml/badge.svg)](https://github.com/REZAULKARIM2024/MeridianHealth-test-automation/actions/workflows/ci.yml)
+![Browsers](https://img.shields.io/badge/CI%20browsers-Chromium%20%7C%20Firefox%20%7C%20WebKit-2EAD33?logo=playwright&logoColor=white)
+[![Allure report](https://img.shields.io/badge/Allure-live%20report-FF6C37)](https://rezaulkarim2024.github.io/MeridianHealth-test-automation/)
 ![Status](https://img.shields.io/badge/Status-Active%20Development-brightgreen)
 ![License](https://img.shields.io/badge/License-Demo%2FPortfolio-lightgrey)
 
@@ -44,6 +46,8 @@ prescription item to the pharmacy cart, and getting matched to a clinical trial,
 - [Form Validation Report](#form-validation-report)
 - [Test Reporting (Allure)](#test-reporting-allure)
 - [CI/CD Pipeline](#cicd-pipeline)
+- [Cross-Browser CI Matrix](#cross-browser-ci-matrix)
+- [Selenium + Playwright](#selenium--playwright)
 - [Test Automation Design Notes](#test-automation-design-notes)
 - [Known Issues & QA Findings](#known-issues--qa-findings)
 - [Roadmap](#roadmap)
@@ -89,7 +93,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 75 tests / 12 spec files"]
+    subgraph Tests["Test Automation — 76 tests / 12 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -141,7 +145,7 @@ flowchart TB
 | Database | MySQL 8, `mysql2` connection pool |
 | E2E Tests | Playwright (TypeScript), Page Object Model |
 | Test Reporting | Allure (`allure-playwright`) |
-| CI/CD | GitHub Actions — MySQL service container, headless Chromium, Allure + Playwright HTML report artifacts on every push |
+| CI/CD | GitHub Actions — MySQL service container, cross-browser matrix (Chromium / Firefox / WebKit), Allure + Playwright HTML reports (with traces) published to GitHub Pages |
 | Also included | A Cypress example spec, for comparison |
 | Dev tooling | `concurrently` (run API + frontend together), `vite preview` for a production-build test target |
 
@@ -261,7 +265,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 75 tests / 12 files
+  tests/                     Playwright spec files (TypeScript), 76 tests / 12 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -296,7 +300,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**75 tests across 12 spec files, currently 100% passing in CI:**
+**76 tests across 12 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -372,6 +376,36 @@ spinning up MySQL from scratch — currently completes in 2–3 minutes, compare
 highly variable (1.5 minutes to over an hour) local run times on some Windows machines,
 which is what motivated setting this up in the first place.
 
+## Cross-Browser CI Matrix
+
+CI runs the full suite on **Chromium, Firefox and WebKit** as a GitHub Actions matrix
+(`fail-fast: false`, so one browser failing never hides the others). Each matrix job
+gets its own MySQL 8 service container, installs only its own browser, and uploads a
+Playwright HTML report (traces on first retry) plus raw Allure results. A final
+`report` job merges everything:
+
+| Report | What it shows | Link |
+|---|---|---|
+| Combined Allure report | All three browsers in one report, grouped by browser (`parentSuite` = Playwright project) | https://rezaulkarim2024.github.io/MeridianHealth-test-automation/ |
+| Playwright report + traces | Per-browser HTML report; open a failed test to step through the trace | `/playwright/chromium/`, `/playwright/firefox/`, `/playwright/webkit/` under the same URL |
+
+Published to GitHub Pages from `main` only (one-time setup: Settings -> Pages -> Source:
+**Deploy from a branch** -> `gh-pages` / root). Every run also writes these links to its
+job summary. Locally: `npm run test:e2e:cross`.
+
+## Selenium + Playwright
+
+I work in two UI automation frameworks and pick per project:
+
+- **Selenium 4 (Java)** - Page Object Model with TestNG/JUnit/Cucumber, REST Assured,
+  Allure and Jenkins/GitHub Actions: ParaBank, OrangeHRM, NorthFace, OpenEMR,
+  Branch-Teller-POS.
+- **Playwright (TypeScript)** - this project: POM, auto-waiting, traces, a real
+  cross-browser CI matrix, API + UI tests in one runner.
+
+Same practices in both: Page Object Model, API-level checks next to UI checks,
+Allure reporting, CI on every push, and root-causing failures from evidence.
+
 ## Test Automation Design Notes
 
 A few specific fixes made during development, kept here because they're the kind of
@@ -414,22 +448,18 @@ Documented rather than hidden, as any real QA process would:
   instead of the `data-testid` attribute (via a `TreeWalker` over text nodes)
   resolved every instance. Never reproducible locally — only in GitHub Actions'
   headless Chromium.
-- **Documented — the app doesn't push browser history state (`INT-01`,
-  `tests/lifecycle.spec.ts`).** Since the app manages all navigation via React state
-  rather than `pushState`/client-side routing, the browser's history has exactly one
-  entry after the initial load. Pressing **Back** mid-flow unmounts the whole app
-  (confirmed via a blank CI screenshot); pressing **Forward** afterward triggers a
-  fresh reload, landing back on the login screen. A real, minor UX gap worth fixing
-  by adopting client-side routing.
-- **Resolved — `users.name` accepted input beyond its `VARCHAR(120)` limit and
-  crashed with a raw 500 instead of a clean validation error.** Found via live
-  testing in the [Form Validation Report](#form-validation-report): a 500-character
-  name reached MySQL uncaught, which threw `ER_DATA_TOO_LONG`, which `asyncHandler`
-  turned into a generic `{"error":"Something went wrong."}` 500 — confusing for a
-  user who just pasted a long string by accident. Fixed by checking
-  `name.trim().length > 120` in `auth.js` before the database call; boundary-tested
-  live (120 succeeds, 121 fails cleanly with a proper 400) and checked in as
-  `API-11`/`API-12`.
+- **Documented - the app doesn't push browser history state (`INT-01`,
+  `tests/lifecycle.spec.ts`).** The app manages all navigation via React state rather
+  than `pushState`/client-side routing, so moving between screens adds no browser
+  history entries and `history.state` stays empty. The browser's **Back** button
+  therefore cannot return to a "previous screen" - it leaves the app (in Chromium a CI
+  screenshot showed a completely blank page, and Forward reloaded to the login screen,
+  consistent with the no-session-persistence finding in `LFC-01`). The first version of
+  this test asserted on the result of `goBack()`/`goForward()`; that result is
+  engine-specific and failed in Firefox once the CI matrix was added, so the test now
+  asserts the root cause (history length and state unchanged across screens), which is
+  identical in Chromium, Firefox and WebKit. A real, minor UX gap worth fixing in the
+  app itself (e.g. adopting a router that reflects screens in the URL).
 
 ## Roadmap
 
