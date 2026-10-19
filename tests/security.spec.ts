@@ -86,3 +86,16 @@ test.describe("Security — injection & XSS safety", () => {
     expect(dialogFired).toBe(false);
   });
 });
+
+test.describe("Security response headers", () => {
+  test("SEC-10 API responses carry standard security headers and don't advertise the framework", async ({ request }) => {
+    const res = await request.get("/api/doctors");
+    expect(res.status()).toBe(200);
+    const h = res.headers();
+    expect(h["x-content-type-options"]).toBe("nosniff");
+    expect(h["x-frame-options"]).toBeTruthy();
+    expect(h["content-security-policy"]).toBeTruthy();
+    // Express advertises itself by default; that header only helps attackers.
+    expect(h["x-powered-by"]).toBeUndefined();
+  });
+});

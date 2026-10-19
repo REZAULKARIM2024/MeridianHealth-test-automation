@@ -1,0 +1,51 @@
+# Full stack in one command:  docker compose up --build
+#   web  -> http://localhost:5173   (React SPA via nginx, /api proxied to the API)
+#   api  -> http://localhost:4000   (Express)
+#   db   -> localhost:3307          (MySQL 8, host port 3307 to avoid clashing with a local MySQL)
+# Dev-only credentials below; never reuse them anywhere real.
+services:
+  db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root_dev_pw
+      MYSQL_DATABASE: meridian_health
+      MYSQL_USER: meridian
+      MYSQL_PASSWORD: meridian_dev_pw
+    ports:
+      - "3307:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot_dev_pw"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - dbdata:/var/lib/mysql
+
+  api:
+    build: ./server
+    environment:
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_USER: meridian
+      DB_PASSWORD: meridian_dev_pw
+      DB_NAME: meridian_health
+      JWT_SECRET: docker_dev_secret_not_for_production
+      PORT: "4000"
+      CORS_ORIGIN: http://localhost:5173
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  dbdata:

@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -25,6 +26,11 @@ process.on("uncaughtException", (err) => {
 
 const app = express();
 
+// Standard security response headers (X-Content-Type-Options, X-Frame-Options,
+// CSP, HSTS, no X-Powered-By ...). Found missing by the ZAP baseline scan and
+// locked in by SEC-10. CORP is relaxed to cross-origin because CORS is already
+// configured explicitly below and the SPA is served from a different origin.
+app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors({ origin: process.env.CORS_ORIGIN || "http://localhost:5173" }));
 app.use(express.json());
 

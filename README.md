@@ -49,6 +49,7 @@ prescription item to the pharmacy cart, and getting matched to a clinical trial,
 - [Cross-Browser CI Matrix](#cross-browser-ci-matrix)
 - [Selenium + Playwright](#selenium--playwright)
 - [Performance Smoke (k6)](#performance-smoke-k6)
+- [Docker Compose & Security Scan](#docker-compose--security-scan)
 - [Test Automation Design Notes](#test-automation-design-notes)
 - [Known Issues & QA Findings](#known-issues--qa-findings)
 - [Roadmap](#roadmap)
@@ -64,7 +65,7 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **76 automated
+The point of the project is the QA process as much as the app itself: **77 automated
 Playwright tests across 12 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
@@ -94,7 +95,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 76 tests / 12 spec files"]
+    subgraph Tests["Test Automation — 77 tests / 12 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -266,7 +267,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 76 tests / 12 files
+  tests/                     Playwright spec files (TypeScript), 77 tests / 12 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -304,7 +305,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**76 tests across 12 spec files, currently 100% passing in CI:**
+**77 tests across 12 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -371,7 +372,7 @@ its own parallel job (`fail-fast: false`):
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs only that job's Playwright browser.
-5. Runs the full 76-test suite against a production build
+5. Runs the full 77-test suite against a production build
    (`npm run test:e2e -- --project=<browser>`).
 6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
    raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
@@ -427,6 +428,31 @@ Each run writes a per-endpoint table to the job summary and uploads the raw k6 s
 an artifact. The gate was verified to fail by tightening one threshold to 1 ms. Baseline
 numbers, rationale for the thresholds and known limits are in
 [`perf/README.md`](perf/README.md). Locally: `npm run perf:smoke` (needs k6).
+
+## Docker Compose & Security Scan
+
+**One-command full stack** (MySQL 8 + Express API + nginx-served SPA):
+
+```bash
+docker compose up --build
+# web http://localhost:5173  ·  api http://localhost:4000  ·  mysql localhost:3307
+```
+
+The API container runs the idempotent schema/seed (`initDb.js`) on start, and nginx
+proxies `/api` to it, so the Playwright suite can run against the compose stack as-is
+(`reuseExistingServer` picks up the running app on :5173). Credentials in
+`docker-compose.yml` are dev-only.
+
+**Security checks**
+- `helmet` adds standard security headers to the API; test `SEC-10` asserts
+  `X-Content-Type-Options`, `X-Frame-Options`, a CSP, and that `X-Powered-By` is absent.
+- The `Security scan (ZAP) + Docker stack` workflow brings the compose stack up in CI,
+  smoke-checks it, then runs an **OWASP ZAP baseline** (passive, non-destructive) scan
+  against the SPA. It runs on push/PR, weekly, and on demand. It is **report-only**
+  (`fail_action: false`): the HTML/JSON report is uploaded as the `zap-baseline-report`
+  artifact, and findings are triaged by hand rather than gating merges.
+- The SPA is served by nginx, which does not set the API's security headers; any
+  related ZAP findings are expected until nginx headers are added.
 
 ## Selenium + Playwright
 
@@ -510,6 +536,8 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
+- Add security headers (CSP, etc.) to the nginx-served SPA and triage ZAP baseline findings
+- AI-assisted test-case generation from requirements, with human review before anything is committed
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
 
