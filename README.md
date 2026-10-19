@@ -407,10 +407,10 @@ threshold is crossed:
 |---|---|
 | Error rate | < 1 % |
 | Checks (status + payload) | > 99 % |
-| health / doctors / trials match | p95 < 150 / 400 / 400 ms |
-| full medicine catalog / search | p95 < 800 / 500 ms |
-| login (bcrypt) | p95 < 900 ms |
-| overall | p99 < 1500 ms |
+| health / doctors / trials match / search | p95 < 50 / 75 / 75 / 75 ms |
+| full medicine catalog | p95 < 150 ms |
+| login (bcrypt) | p95 < 250 ms |
+| overall | p99 < 300 ms |
 
 Each run writes a per-endpoint table to the job summary and uploads the raw k6 summary as
 an artifact. The gate was verified to fail by tightening one threshold to 1 ms. Baseline

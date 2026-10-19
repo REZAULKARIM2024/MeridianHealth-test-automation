@@ -25,19 +25,21 @@ export const options = {
       maxVUs: 60,
     },
   },
-  // SLOs - the numbers a release must meet. Tuned for the GitHub Actions
-  // 2-vCPU runner (API + MySQL on the same box), with headroom over the
-  // measured baseline recorded in perf/README.md.
+  // SLOs - the numbers a release must meet. Set at roughly 5-10x the p95 measured
+  // on the GitHub Actions 2-vCPU runner (API + MySQL on one box); see the
+  // baseline table in perf/README.md. Tight enough that a real regression
+  // (e.g. a dropped index or an N+1 query) fails the build, loose enough to
+  // absorb runner noise.
   thresholds: {
     http_req_failed: ["rate<0.01"],                       // < 1% errors
     checks: ["rate>0.99"],                                // > 99% checks pass
-    "http_req_duration{endpoint:health}": ["p(95)<150"],
-    "http_req_duration{endpoint:doctors}": ["p(95)<400"],
-    "http_req_duration{endpoint:medicines}": ["p(95)<800"], // full catalog, no pagination
-    "http_req_duration{endpoint:medicine_search}": ["p(95)<500"],
-    "http_req_duration{endpoint:trials_match}": ["p(95)<400"],
-    login_duration: ["p(95)<900"],                        // bcrypt compare is CPU-bound
-    http_req_duration: ["p(99)<1500"],                    // overall tail
+    "http_req_duration{endpoint:health}": ["p(95)<50"],
+    "http_req_duration{endpoint:doctors}": ["p(95)<75"],
+    "http_req_duration{endpoint:medicines}": ["p(95)<150"], // full catalog, no pagination
+    "http_req_duration{endpoint:medicine_search}": ["p(95)<75"],
+    "http_req_duration{endpoint:trials_match}": ["p(95)<75"],
+    login_duration: ["p(95)<250"],                          // bcrypt compare is CPU-bound
+    http_req_duration: ["p(99)<300"],                    // overall tail
   },
   summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max"],
 };
