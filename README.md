@@ -64,7 +64,7 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **75 automated
+The point of the project is the QA process as much as the app itself: **76 automated
 Playwright tests across 12 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
@@ -102,8 +102,8 @@ flowchart TB
     end
 
     subgraph Pipeline["CI/CD"]
-        GHA["GitHub Actions<br/>MySQL service container, headless Chromium"]
-        AllureReport["Allure report<br/>uploaded as a build artifact"]
+        GHA["GitHub Actions<br/>MySQL service container per job<br/>Chromium / Firefox / WebKit matrix + k6 perf smoke"]
+        AllureReport["Combined Allure report + Playwright traces<br/>published to GitHub Pages"]
     end
 
     Tests --> React
@@ -296,7 +296,8 @@ meridian-tests/
 ## Testing
 
 ```bash
-npm run test:e2e -- --project=chromium
+npm run test:e2e -- --project=chromium   # one browser (fastest)
+npm run test:e2e:cross                    # Chromium + Firefox + WebKit
 ```
 
 This runs the `pretest:e2e` hook first (`vite build`), so tests run against a real
@@ -361,21 +362,31 @@ CI generates and uploads this same report as a build artifact on every push — 
 
 ## CI/CD Pipeline
 
-`.github/workflows/ci.yml` runs on every push/PR to `main`:
+Two workflows run on every push/PR to `main`:
+
+**`ci.yml` - end-to-end tests, as a Chromium / Firefox / WebKit matrix.** Each browser is
+its own parallel job (`fail-fast: false`):
 
 1. Spins up a real **MySQL 8 service container** and creates the `meridian` app user.
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
-4. Installs Playwright's Chromium browser.
-5. Runs the full 75-test suite against a production build (`npm run test:e2e --
-   --project=chromium`).
-6. Uploads three artifacts, even on failure: the Playwright HTML report, raw
-   `test-results/` (screenshots, traces, `error-context.md` per failure — this is what
-   was used to root-cause the CI-only race and the browser-history finding described
-   below), and the generated Allure report.
+4. Installs only that job's Playwright browser.
+5. Runs the full 76-test suite against a production build
+   (`npm run test:e2e -- --project=<browser>`).
+6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
+   raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
+   `error-context.md` per failure; this is what was used to root-cause the CI-only race
+   and the browser-history finding described below).
+
+A final `report` job merges the three browsers into one Allure report and publishes it,
+with the per-browser Playwright reports, to GitHub Pages - see
+[Cross-Browser CI Matrix](#cross-browser-ci-matrix).
+
+**`perf.yml` - k6 performance smoke with SLOs**, also nightly - see
+[Performance Smoke (k6)](#performance-smoke-k6).
 
 The badge at the top of this README reflects the latest run. A full CI run — including
-spinning up MySQL from scratch — currently completes in 2–3 minutes, compared to
+spinning up MySQL from scratch — currently completes in about 3–4 minutes (all three browsers in parallel), compared to
 highly variable (1.5 minutes to over an hour) local run times on some Windows machines,
 which is what motivated setting this up in the first place.
 
@@ -499,7 +510,8 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
-- Add a scheduled (nightly) CI run in addition to push/PR triggers
+- Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
+- Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
 
 ## License
 
