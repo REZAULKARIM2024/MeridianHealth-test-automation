@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS doctor_slots (
   id         INT AUTO_INCREMENT PRIMARY KEY,
   doctor_id  VARCHAR(10) NOT NULL,
   slot_label VARCHAR(20) NOT NULL,
+  UNIQUE KEY uq_doctor_slot (doctor_id, slot_label),
   FOREIGN KEY (doctor_id) REFERENCES doctors(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 

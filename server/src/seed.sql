@@ -7,8 +7,9 @@ INSERT INTO doctors (id, name, specialty, rating) VALUES
   ('d4', 'Dr. Marcus Webb', 'Psychiatry', 4.9)
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
--- doctor_slots has no natural unique key on (doctor_id, slot_label), so clear
--- and reinsert each run rather than risk accumulating duplicates.
+-- doctor_slots has a UNIQUE (doctor_id, slot_label) key (uq_doctor_slot), so
+-- duplicates are impossible; the table is still cleared and reinserted so the
+-- base seed always matches this file exactly.
 DELETE FROM doctor_slots;
 INSERT INTO doctor_slots (doctor_id, slot_label) VALUES
   ('d1','9:00 AM'), ('d1','11:30 AM'), ('d1','2:00 PM'), ('d1','4:30 PM'),

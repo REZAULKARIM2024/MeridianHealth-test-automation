@@ -1,0 +1,140 @@
+name: Performance smoke (k6)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * *"      # nightly, catches slow drift between pushes
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  k6:
+    name: k6 smoke vs SLOs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root_ci_pw
+          MYSQL_DATABASE: meridian_health
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot_ci_pw"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Wait for MySQL and create the app-level user
+        run: |
+          for i in $(seq 1 20); do
+            mysqladmin ping -h 127.0.0.1 -P 3306 -uroot -proot_ci_pw --silent && break
+            sleep 2
+          done
+          mysql -h 127.0.0.1 -P 3306 -uroot -proot_ci_pw -e "
+            CREATE USER IF NOT EXISTS 'meridian'@'%' IDENTIFIED BY 'meridian_dev_pw';
+            GRANT ALL PRIVILEGES ON meridian_health.* TO 'meridian'@'%';
+            FLUSH PRIVILEGES;"
+
+      - name: Install server dependencies
+        run: npm install --prefix server
+
+      - name: Write server/.env for CI
+        run: |
+          cat > server/.env << 'EOF2'
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_USER=meridian
+          DB_PASSWORD=meridian_dev_pw
+          DB_NAME=meridian_health
+          JWT_SECRET=ci_test_secret_not_for_production_use
+          PORT=4000
+          CORS_ORIGIN=http://localhost:5173
+          EOF2
+
+      - name: Initialize database schema + seed data
+        run: npm run db:init --prefix server
+
+      - name: Load the bulk dataset if present (realistic catalog size)
+        run: |
+          for f in bulk_seed.sql more_medicines.sql; do
+            if [ -f "server/src/$f" ]; then
+              echo "Loading $f"
+              mysql -h 127.0.0.1 -P 3306 -umeridian -pmeridian_dev_pw meridian_health < "server/src/$f"
+            else
+              echo "server/src/$f not in repo - skipping (base seed only)"
+            fi
+          done
+
+      - name: Start the API
+        run: |
+          nohup node server/src/index.js > api.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4000/api/health && break
+            sleep 1
+          done
+          curl -sf http://localhost:4000/api/health
+
+      - name: Install k6
+        uses: grafana/setup-k6-action@v1.2.2
+
+      - name: Run k6 smoke test (fails the build if an SLO is breached)
+        run: k6 run --summary-export=k6-summary.json perf/smoke.k6.js
+
+      - name: Publish SLO results to the job summary
+        if: always()
+        run: |
+          [ -f k6-summary.json ] || { echo "No k6 summary produced" >> "$GITHUB_STEP_SUMMARY"; exit 0; }
+          python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          m = json.load(open("k6-summary.json"))["metrics"]
+          rows = [
+            ("overall", "http_req_duration"),
+            ("health", "http_req_duration{endpoint:health}"),
+            ("doctors", "http_req_duration{endpoint:doctors}"),
+            ("medicines (full catalog)", "http_req_duration{endpoint:medicines}"),
+            ("medicine search", "http_req_duration{endpoint:medicine_search}"),
+            ("trials match", "http_req_duration{endpoint:trials_match}"),
+            ("login (bcrypt)", "login_duration"),
+          ]
+          print("## k6 performance smoke\n")
+          print("| Endpoint | avg ms | p95 ms | p99 ms | SLO | Result |")
+          print("|---|---:|---:|---:|---|---|")
+          for label, key in rows:
+              v = m.get(key)
+              if not v: continue
+              th = v.get("thresholds", {})
+              slo = ", ".join(th) or "-"
+              ok = "pass" if th and all(not x for x in th.values()) else ("fail" if th else "-")
+              print(f"| {label} | {v['avg']:.1f} | {v['p(95)']:.1f} | {v['p(99)']:.1f} | {slo} | {ok} |")
+          f = m.get("http_req_failed", {})
+          print(f"\nError rate: {f.get('value', 0)*100:.2f}% (SLO < 1%) - requests: {m.get('http_reqs', {}).get('count', 0)}")
+          PY
+
+      - name: Upload k6 summary + API log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: k6-results
+          path: |
+            k6-summary.json
+            api.log
+          retention-days: 14
+          if-no-files-found: warn

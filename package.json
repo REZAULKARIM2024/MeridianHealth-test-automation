@@ -11,6 +11,7 @@
     "serve:full": "concurrently -k -n API,WEB -c blue,green \"npm start --prefix server\" \"vite preview --port 5173\"",
     "pretest:e2e": "vite build",
     "test:e2e": "playwright test",
+    "perf:smoke": "k6 run perf/smoke.k6.js",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:dev": "playwright test --config=playwright.dev.config.ts",

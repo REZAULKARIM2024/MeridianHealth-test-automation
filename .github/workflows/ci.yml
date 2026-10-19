@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
-      fail-fast: false
+      fail-fast: false          # one browser failing must not hide the others
       matrix:
         browser: [chromium, firefox, webkit]
 
@@ -35,10 +35,10 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -84,7 +84,7 @@ jobs:
 
       - name: Upload Playwright HTML report (includes traces)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report-${{ matrix.browser }}
           path: playwright-report/
@@ -92,7 +92,7 @@ jobs:
 
       - name: Upload raw Allure results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: allure-results-${{ matrix.browser }}
           path: allure-results/
@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload traces/screenshots on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-${{ matrix.browser }}
           path: test-results/
@@ -117,21 +117,21 @@ jobs:
       contents: write
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 20
 
       - name: Download Allure results (all browsers)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: allure-results-*
           path: allure-results-all
 
       - name: Download Playwright HTML reports (all browsers)
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           pattern: playwright-report-*
           path: pw-reports
@@ -139,11 +139,14 @@ jobs:
       - name: Build combined Allure report + site
         run: |
           mkdir -p site/playwright
+          # One Allure report; every test carries parentSuite = project name
+          # (chromium / firefox / webkit), so results are grouped per browser.
           if ls allure-results-all/*/ >/dev/null 2>&1; then
             npx --yes allure-commandline@2.29.0 generate allure-results-all/* --clean -o site
           else
             echo "No Allure results found" > site/index.html
           fi
+          # Per-browser Playwright HTML reports (these open the trace viewer).
           for d in pw-reports/playwright-report-*; do
             [ -d "$d" ] || continue
             b="${d##*playwright-report-}"

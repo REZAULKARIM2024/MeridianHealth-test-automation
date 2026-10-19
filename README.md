@@ -48,6 +48,7 @@ prescription item to the pharmacy cart, and getting matched to a clinical trial,
 - [CI/CD Pipeline](#cicd-pipeline)
 - [Cross-Browser CI Matrix](#cross-browser-ci-matrix)
 - [Selenium + Playwright](#selenium--playwright)
+- [Performance Smoke (k6)](#performance-smoke-k6)
 - [Test Automation Design Notes](#test-automation-design-notes)
 - [Known Issues & QA Findings](#known-issues--qa-findings)
 - [Roadmap](#roadmap)
@@ -272,7 +273,9 @@ meridian-tests/
   playwright.dev.config.ts   alternate config for fast dev-mode iteration
   run-tests.bat              one-click Windows setup + test runner
   vite.config.js             dev + preview proxy: /api -> localhost:4000
-  .github/workflows/ci.yml   GitHub Actions pipeline
+  .github/workflows/ci.yml   GitHub Actions pipeline (Chromium/Firefox/WebKit matrix)
+  .github/workflows/perf.yml k6 performance smoke with SLOs
+  perf/                      k6 script + SLO documentation
   FORM_VALIDATION_REPORT.md  senior-QA-level form validation review, live-verified
 ```
 
@@ -282,7 +285,7 @@ meridian-tests/
 |---|---|
 | `users` | Signup/login accounts |
 | `doctors` | Bookable doctors (name, specialty, rating) |
-| `doctor_slots` | Available time slots per doctor |
+| `doctor_slots` | Available time slots per doctor; `UNIQUE (doctor_id, slot_label)` so repeated seeding cannot create duplicates (`db:init` migrates older databases and removes existing duplicates) |
 | `appointments` | Booked appointments, linked to `users` + `doctors` |
 | `medicines` | Pharmacy catalog, incl. Rx-required flag and stock |
 | `orders` / `order_items` | Pharmacy checkout, order line items |
@@ -392,6 +395,27 @@ Playwright HTML report (traces on first retry) plus raw Allure results. A final
 Published to GitHub Pages from `main` only (one-time setup: Settings -> Pages -> Source:
 **Deploy from a branch** -> `gh-pages` / root). Every run also writes these links to its
 job summary. Locally: `npm run test:e2e:cross`.
+
+## Performance Smoke (k6)
+
+A separate workflow (`.github/workflows/perf.yml`) runs a **k6 smoke test with explicit
+SLOs** against the real API on every push/PR and nightly. It sends 20 iterations/s for
+30 s at the read paths and the login path, and fails the build (k6 exit code 99) if any
+threshold is crossed:
+
+| Scope | SLO |
+|---|---|
+| Error rate | < 1 % |
+| Checks (status + payload) | > 99 % |
+| health / doctors / trials match | p95 < 150 / 400 / 400 ms |
+| full medicine catalog / search | p95 < 800 / 500 ms |
+| login (bcrypt) | p95 < 900 ms |
+| overall | p99 < 1500 ms |
+
+Each run writes a per-endpoint table to the job summary and uploads the raw k6 summary as
+an artifact. The gate was verified to fail by tightening one threshold to 1 ms. Baseline
+numbers, rationale for the thresholds and known limits are in
+[`perf/README.md`](perf/README.md). Locally: `npm run perf:smoke` (needs k6).
 
 ## Selenium + Playwright
 
