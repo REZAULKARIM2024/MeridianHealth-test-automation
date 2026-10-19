@@ -2,7 +2,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# root lockfile is out of sync with package.json (CI also uses npm install), so ci would fail
+RUN npm install --no-audit --no-fund
 COPY . .
 RUN npm run build
 
