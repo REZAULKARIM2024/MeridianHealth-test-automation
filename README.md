@@ -452,8 +452,13 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   against the SPA. It runs on push/PR, weekly, and on demand. It is **report-only**
   (`fail_action: false`): the HTML/JSON report is uploaded as the `zap-baseline-report`
   artifact, and findings are triaged by hand rather than gating merges.
-- The SPA is served by nginx, which does not set the API's security headers; any
-  related ZAP findings are expected until nginx headers are added.
+- The first ZAP baseline found 10 alerts, all missing HTTP headers on the nginx-served SPA (no CSP, no
+  anti-clickjacking, no `nosniff`, no Permissions-Policy, COOP/CORP, `Server` version leak, caching).
+  `nginx.conf` now sets those headers on the SPA (the API keeps helmet's), hides the nginx version, and
+  sends `Cache-Control: no-cache`. The full 84-test suite passes against the nginx-served build with the
+  CSP applied (run locally on Chromium). Not set on purpose: `Cross-Origin-Embedder-Policy`, since
+  `require-corp` would block the Google Fonts stylesheet. The CSP keeps `style-src 'unsafe-inline'`
+  because the app uses inline styles; re-run the ZAP workflow to see what remains.
 
 ## Selenium + Playwright
 
@@ -537,7 +542,7 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
-- Add security headers (CSP, etc.) to the nginx-served SPA and triage ZAP baseline findings
+- Remove `style-src 'unsafe-inline'` from the SPA CSP (move inline styles to classes) and re-triage the ZAP findings
 - Run the `qa-test-case-agent` workflow (needs API credit) and compare its draft cases with the hand-reviewed ones in `ai-test-design/`
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
