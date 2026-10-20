@@ -458,7 +458,12 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   sends `Cache-Control: no-cache`. The full 84-test suite passes against the nginx-served build with the
   CSP applied (run locally on Chromium). Not set on purpose: `Cross-Origin-Embedder-Policy`, since
   `require-corp` would block the Google Fonts stylesheet. The CSP keeps `style-src 'unsafe-inline'`
-  because the app uses inline styles; re-run the ZAP workflow to see what remains.
+  because the app uses inline styles.
+
+  **Result of the re-scan: 10 alerts -> 4.** Remaining: `CSP: style-src unsafe-inline` (Medium - the
+  trade-off above), `Cross-Origin-Embedder-Policy` missing (Low - deliberate), and two Informational
+  notes ("Modern Web Application", "Storable but Non-Cacheable Content", the latter about the new
+  `no-cache`). Report-only: the scan does not gate merges.
 
 ## Selenium + Playwright
 
