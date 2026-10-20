@@ -1,0 +1,55 @@
+name: AI test design (manual)
+
+# Manually triggered: generates DRAFT test cases from the user stories in
+# ai-test-design/stories/ using the qa-test-case-agent. Needs the repository
+# secret ANTHROPIC_API_KEY. Output is a downloadable artifact only - nothing
+# is committed automatically. A human reviews it before any test is written.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check out the agent (pinned commit)
+        uses: actions/checkout@v6
+        with:
+          repository: REZAULKARIM2024/qa-test-case-agent
+          ref: 7439857f0847ee0d9b220b0c5e86e67e5a55d6c2
+          path: agent
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install agent dependencies
+        run: pip install anthropic
+
+      - name: Generate draft test cases for each story
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "Add a repository secret named ANTHROPIC_API_KEY first." >&2
+            exit 1
+          fi
+          mkdir -p drafts
+          for f in ai-test-design/stories/*.txt; do
+            name=$(basename "$f" .txt)
+            python agent/agent.py --file "$f"
+            mkdir -p "drafts/$name"
+            cp agent/output/* "drafts/$name/"
+            rm -rf agent/output
+          done
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ai-draft-test-cases
+          path: drafts/
+          retention-days: 30

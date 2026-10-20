@@ -537,7 +537,7 @@ Documented rather than hidden, as any real QA process would:
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
 - Add security headers (CSP, etc.) to the nginx-served SPA and triage ZAP baseline findings
-- AI-assisted test-case generation from requirements, with human review before anything is committed
+- Review the first AI-generated draft test cases (see `ai-test-design/`) and turn the accepted ones into Playwright tests
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
 

@@ -1,0 +1,10 @@
+Title: Book a doctor appointment
+
+As a signed-in patient, I want to book a time slot with a doctor and give an optional reason, so that I have a confirmed appointment I can see later.
+
+Acceptance Criteria:
+- Only a signed-in user can book an appointment; a request without a valid login is rejected.
+- A time slot must be selected; booking without one is rejected with the message "Select a time slot to continue."
+- The chosen slot must be one of the slots offered by the chosen doctor; any other slot is rejected with "That slot isn't available for this doctor."
+- The reason is optional; an appointment can be booked with or without it.
+- A successfully booked appointment appears in the user's own appointment list, and not in any other user's list.

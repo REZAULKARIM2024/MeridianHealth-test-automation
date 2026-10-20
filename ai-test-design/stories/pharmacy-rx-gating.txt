@@ -1,0 +1,9 @@
+Title: Order medicine with prescription gating
+
+As a signed-in patient, I want to order medicines from the pharmacy, so that I receive them at my address, while prescription-only medicines require a valid prescription.
+
+Acceptance Criteria:
+- Only a signed-in user can place an order.
+- An order containing at least one prescription-only (Rx) item is rejected with "Upload a valid prescription for Rx items in your cart." unless the prescription has been confirmed.
+- An order containing only non-Rx items can be placed without a prescription.
+- A placed order appears in the user's own order list, and not in any other user's list.
