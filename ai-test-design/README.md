@@ -17,5 +17,11 @@ Draft test cases are generated from user stories with the
 - Nothing is committed or run automatically; the agent's version is pinned in the workflow.
 
 ## Status
-No generated output is committed here yet, and none of the existing 77 tests were written by the agent.
-This section will list accepted cases (and how many were rejected) once a reviewed run exists.
+- **Agent run: not done yet.** The workflow works up to the Anthropic call, but the account had no API credit, so
+  the `qa-test-case-agent` has produced no output here and no test is claimed to come from it.
+- **Claude-drafted, human-reviewed cases: done.** Claude drafted cases directly from the two stories (no agent),
+  they were checked against the API code, and the ones not already covered became `tests/story-criteria.spec.ts`
+  (7 tests, tagged BOOK-n / RX-n by criterion; all pass on Chromium locally and in CI).
+- Already covered elsewhere and therefore not duplicated: login required to book (SEC-03/04/05/06).
+- Not covered yet: the Rx upload itself (only the `rxConfirmed` flag is exercised through the API).
+- Once the agent has run, its output can be compared with these hand-reviewed cases here.

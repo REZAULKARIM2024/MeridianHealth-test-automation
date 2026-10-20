@@ -65,8 +65,8 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **77 automated
-Playwright tests across 12 spec files** — UI flows, direct API/security testing, and
+The point of the project is the QA process as much as the app itself: **84 automated
+Playwright tests across 13 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
 UX gap, and a real input-validation bug were all root-caused and fixed — with
@@ -95,7 +95,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 77 tests / 12 spec files"]
+    subgraph Tests["Test Automation — 84 tests / 13 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -267,7 +267,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 77 tests / 12 files
+  tests/                     Playwright spec files (TypeScript), 84 tests / 13 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -305,7 +305,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**77 tests across 12 spec files, currently 100% passing in CI:**
+**84 tests across 13 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -318,7 +318,8 @@ first-request compile latency as a source of flaky timing.
 | `accessibility.spec.ts` | Keyboard navigation, accessible names, focus visibility |
 | `performance_and_device.spec.ts` | Load time budget, network-drop tolerance, data reset |
 | `api.spec.ts` | Direct HTTP tests against the real backend — signup/login/doctors/medicines/booking/trial matching, plus the `name`-length boundary (`API-11`/`API-12`) |
-| `security.spec.ts` | Unauthorized access, tampered/forged JWTs, SQL-injection and XSS safety |
+| `security.spec.ts` | Unauthorized access, tampered/forged JWTs, SQL-injection and XSS safety, security response headers |
+| `story-criteria.spec.ts` | Acceptance criteria of the booking and pharmacy-Rx user stories (error messages, optional fields, per-user data isolation) |
 | `lifecycle.spec.ts` | Session behavior across a reload; browser Back/Forward and tab-visibility "interrupt" tests |
 | `debug-booking.spec.ts` | A diagnostic spec (network/console dump) used during development to isolate a timing issue in the booking flow — kept in the suite as a template for future debugging |
 
@@ -372,7 +373,7 @@ its own parallel job (`fail-fast: false`):
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs only that job's Playwright browser.
-5. Runs the full 77-test suite against a production build
+5. Runs the full 84-test suite against a production build
    (`npm run test:e2e -- --project=<browser>`).
 6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
    raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
@@ -537,7 +538,7 @@ Documented rather than hidden, as any real QA process would:
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
 - Add security headers (CSP, etc.) to the nginx-served SPA and triage ZAP baseline findings
-- Review the first AI-generated draft test cases (see `ai-test-design/`) and turn the accepted ones into Playwright tests
+- Run the `qa-test-case-agent` workflow (needs API credit) and compare its draft cases with the hand-reviewed ones in `ai-test-design/`
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
 
