@@ -467,16 +467,16 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   artifact, and findings are triaged by hand rather than gating merges.
 - The first ZAP baseline found 10 alerts, all missing HTTP headers on the nginx-served SPA (no CSP, no
   anti-clickjacking, no `nosniff`, no Permissions-Policy, COOP/CORP, `Server` version leak, caching).
-  `nginx.conf` now sets those headers on the SPA (the API keeps helmet's), hides the nginx version, and
-  sends `Cache-Control: no-cache`. Not set on purpose: `Cross-Origin-Embedder-Policy`, since
-  `require-corp` would block the Google Fonts stylesheet. The CSP no longer allows `style-src 'unsafe-inline'`:
-  the one inline `<style>` block was moved into `src/index.css` and the fonts are loaded with `<link>` tags
-  (React `style={{}}` props are set through the CSSOM, which a CSP does not block). The full 84-test suite
-  passes against the nginx-served build under this CSP on Chromium, with no CSP violations logged (checked
-  locally; the ZAP re-scan will confirm).
-
-  **Re-scan after the first fix: 10 alerts -> 4** (`style-src unsafe-inline`, COEP, and two Informational notes);
-  the `unsafe-inline` one is addressed by the change above.
+  `nginx.conf` now sets those headers on the SPA (the API keeps helmet's), hides the nginx version and
+  sends `Cache-Control: no-cache`. Re-scan: **10 alerts -> 4**.
+- Second round: the inline `<style>` block moved into `src/index.css` (so the CSP no longer needs
+  `style-src 'unsafe-inline'`; React `style={{}}` props go through the CSSOM, which a CSP does not block),
+  which cleared that alert. The next scan then flagged the Google Fonts `<link>` (Sub Resource Integrity
+  missing, and SRI is not possible for that stylesheet), so the fonts are now **self-hosted** with
+  `@fontsource` packages. That also let the CSP drop every external origin (`style-src 'self'; font-src 'self'`)
+  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 84-test suite passes against the
+  nginx-served build under this CSP on Chromium, with the fonts loading and no CSP violations logged
+  (checked locally); the next ZAP run is the independent confirmation.
 
 ## Selenium + Playwright
 
@@ -560,7 +560,7 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
-- Re-run ZAP after the CSP tightening and triage whatever is left
+- Triage whatever the next ZAP baseline reports after the font self-hosting
 - Run the `qa-test-case-agent` workflow (needs API credit) and compare its draft cases with the hand-reviewed ones in `ai-test-design/`
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
