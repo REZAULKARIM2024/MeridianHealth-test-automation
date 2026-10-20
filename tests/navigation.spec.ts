@@ -38,7 +38,10 @@ test.describe("Navigation & Cross-Device", () => {
     expect(box?.width).toBeLessThanOrEqual(400);
   });
 
-  test("XDV-02 desktop toggle renders side navigation", async ({ page }) => {
+  test("XDV-02 desktop toggle renders side navigation", async ({ page }, testInfo) => {
+    // The desktop layout is wider than 800px; a phone viewport (~400px) cannot show it, so this
+    // check only makes sense on the desktop projects.
+    test.skip(testInfo.project.name.startsWith("mobile"), "desktop layout is wider than a phone viewport");
     const nav = new NavPage(page);
     await nav.toggleDesktop.click();
     await expect(page.getByText("Meridian")).toBeVisible();

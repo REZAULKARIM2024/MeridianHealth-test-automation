@@ -403,20 +403,24 @@ which is what motivated setting this up in the first place.
 
 ## Cross-Browser CI Matrix
 
-CI runs the full suite on **Chromium, Firefox and WebKit** as a GitHub Actions matrix
-(`fail-fast: false`, so one browser failing never hides the others). Each matrix job
+CI runs the full suite on **Chromium, Firefox and WebKit** plus two **mobile emulations** (Pixel 7 on
+Chromium, iPhone 14 on WebKit) as a five-job GitHub Actions matrix
+(`fail-fast: false`, so one project failing never hides the others). Each matrix job
 gets its own MySQL 8 service container, installs only its own browser, and uploads a
 Playwright HTML report (traces on first retry) plus raw Allure results. A final
 `report` job merges everything:
 
 | Report | What it shows | Link |
 |---|---|---|
-| Combined Allure report | All three browsers in one report, grouped by browser (`parentSuite` = Playwright project) | https://rezaulkarim2024.github.io/MeridianHealth-test-automation/ |
-| Playwright report + traces | Per-browser HTML report; open a failed test to step through the trace | `/playwright/chromium/`, `/playwright/firefox/`, `/playwright/webkit/` under the same URL |
+| Combined Allure report | All five projects in one report, grouped by browser (`parentSuite` = Playwright project) | https://rezaulkarim2024.github.io/MeridianHealth-test-automation/ |
+| Playwright report + traces | Per-browser HTML report; open a failed test to step through the trace | `/playwright/chromium/`, `/firefox/`, `/webkit/`, `/mobile-chrome/`, `/mobile-safari/` under the same URL |
 
 Published to GitHub Pages from `main` only (one-time setup: Settings -> Pages -> Source:
 **Deploy from a branch** -> `gh-pages` / root). Every run also writes these links to its
 job summary. Locally: `npm run test:e2e:cross`.
+
+The mobile projects emulate a phone viewport, touch input and user agent; they are **not real devices**.
+XDV-02 (desktop layout wider than 800 px) is skipped on them because a phone viewport cannot show it.
 
 ## Performance Smoke (k6)
 
@@ -464,15 +468,15 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
 - The first ZAP baseline found 10 alerts, all missing HTTP headers on the nginx-served SPA (no CSP, no
   anti-clickjacking, no `nosniff`, no Permissions-Policy, COOP/CORP, `Server` version leak, caching).
   `nginx.conf` now sets those headers on the SPA (the API keeps helmet's), hides the nginx version, and
-  sends `Cache-Control: no-cache`. The full 84-test suite passes against the nginx-served build with the
-  CSP applied (run locally on Chromium). Not set on purpose: `Cross-Origin-Embedder-Policy`, since
-  `require-corp` would block the Google Fonts stylesheet. The CSP keeps `style-src 'unsafe-inline'`
-  because the app uses inline styles.
+  sends `Cache-Control: no-cache`. Not set on purpose: `Cross-Origin-Embedder-Policy`, since
+  `require-corp` would block the Google Fonts stylesheet. The CSP no longer allows `style-src 'unsafe-inline'`:
+  the one inline `<style>` block was moved into `src/index.css` and the fonts are loaded with `<link>` tags
+  (React `style={{}}` props are set through the CSSOM, which a CSP does not block). The full 84-test suite
+  passes against the nginx-served build under this CSP on Chromium, with no CSP violations logged (checked
+  locally; the ZAP re-scan will confirm).
 
-  **Result of the re-scan: 10 alerts -> 4.** Remaining: `CSP: style-src unsafe-inline` (Medium - the
-  trade-off above), `Cross-Origin-Embedder-Policy` missing (Low - deliberate), and two Informational
-  notes ("Modern Web Application", "Storable but Non-Cacheable Content", the latter about the new
-  `no-cache`). Report-only: the scan does not gate merges.
+  **Re-scan after the first fix: 10 alerts -> 4** (`style-src unsafe-inline`, COEP, and two Informational notes);
+  the `unsafe-inline` one is addressed by the change above.
 
 ## Selenium + Playwright
 
@@ -556,7 +560,7 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
-- Remove `style-src 'unsafe-inline'` from the SPA CSP (move inline styles to classes) and re-triage the ZAP findings
+- Re-run ZAP after the CSP tightening and triage whatever is left
 - Run the `qa-test-case-agent` workflow (needs API credit) and compare its draft cases with the hand-reviewed ones in `ai-test-design/`
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)

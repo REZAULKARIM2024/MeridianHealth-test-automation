@@ -11,13 +11,19 @@ permissions:
 
 jobs:
   e2e:
-    name: e2e (${{ matrix.browser }})
+    name: e2e (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
       fail-fast: false          # one browser failing must not hide the others
       matrix:
-        browser: [chromium, firefox, webkit]
+        include:
+          # project = Playwright project name; engine = browser binary to install
+          - { project: chromium,      engine: chromium }
+          - { project: firefox,       engine: firefox }
+          - { project: webkit,        engine: webkit }
+          - { project: mobile-chrome, engine: chromium }   # Pixel 7 emulation
+          - { project: mobile-safari, engine: webkit }     # iPhone 14 emulation
 
     services:
       mysql:
@@ -76,17 +82,17 @@ jobs:
       - name: Initialize database schema + seed data
         run: npm run db:init --prefix server
 
-      - name: Install Playwright's ${{ matrix.browser }} browser
-        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Install Playwright's ${{ matrix.engine }} browser
+        run: npx playwright install --with-deps ${{ matrix.engine }}
 
-      - name: Run the Playwright test suite (${{ matrix.browser }})
-        run: npm run test:e2e -- --project=${{ matrix.browser }}
+      - name: Run the Playwright test suite (${{ matrix.project }})
+        run: npm run test:e2e -- --project=${{ matrix.project }}
 
       - name: Upload Playwright HTML report (includes traces)
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: playwright-report-${{ matrix.browser }}
+          name: playwright-report-${{ matrix.project }}
           path: playwright-report/
           retention-days: 14
 
@@ -94,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: allure-results-${{ matrix.browser }}
+          name: allure-results-${{ matrix.project }}
           path: allure-results/
           retention-days: 14
           if-no-files-found: warn
@@ -103,7 +109,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: test-results-${{ matrix.browser }}
+          name: test-results-${{ matrix.project }}
           path: test-results/
           retention-days: 14
 
@@ -171,8 +177,8 @@ jobs:
           {
             echo "## Test reports"
             if [ "${GITHUB_REF}" = "refs/heads/main" ] && [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-              echo "- Combined Allure report (Chromium + Firefox + WebKit): ${BASE}/"
-              echo "- Playwright report + traces: [Chromium](${BASE}/playwright/chromium/) · [Firefox](${BASE}/playwright/firefox/) · [WebKit](${BASE}/playwright/webkit/)"
+              echo "- Combined Allure report (3 desktop engines + 2 mobile emulations): ${BASE}/"
+              echo "- Playwright report + traces: [Chromium](${BASE}/playwright/chromium/) · [Firefox](${BASE}/playwright/firefox/) · [WebKit](${BASE}/playwright/webkit/) · [Mobile Chrome](${BASE}/playwright/mobile-chrome/) · [Mobile Safari](${BASE}/playwright/mobile-safari/)"
               echo ""
               echo "_Pages updates a minute or so after this job ends._"
             else

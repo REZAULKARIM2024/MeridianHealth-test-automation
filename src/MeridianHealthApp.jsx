@@ -29,15 +29,8 @@ const C = {
   dangerTint: "#F6E3DD",
 };
 
-const FONT_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
-.mh-root { font-family: 'IBM Plex Sans', system-ui, sans-serif; color: ${C.ink}; }
-.mh-display { font-family: 'Space Grotesk', system-ui, sans-serif; }
-.mh-focus:focus-visible { outline: 2px solid ${C.primary}; outline-offset: 2px; }
-.mh-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-.mh-scroll::-webkit-scrollbar-thumb { background: ${C.border}; border-radius: 999px; }
-@media (prefers-reduced-motion: reduce) { .mh-anim { transition: none !important; } }
-`;
+/* Global CSS (fonts, focus ring, scrollbar) lives in src/index.css + index.html, not in an inline
+   <style> element, so the page can run under a CSP without style-src 'unsafe-inline'. */
 
 /* ---------------- Static UI-only lookups ---------------- */
 /* Doctors, medicines, and trials now come from the API (backed by MySQL) —
@@ -849,7 +842,6 @@ export default function MeridianHealthApp() {
 
   return (
     <div className="mh-root w-full flex flex-col items-center py-6" style={{ background: C.bg, minHeight: 600 }}>
-      <style>{FONT_CSS}</style>
 
       <div className="flex items-center gap-2 mb-4 rounded-full p-1" style={{ background: C.surfaceAlt }}>
         <button data-testid="toggle-mobile" onClick={() => setDevice("mobile")} className="mh-focus flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold"
