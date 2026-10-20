@@ -147,6 +147,9 @@ flowchart TB
 | Database | MySQL 8, `mysql2` connection pool |
 | E2E Tests | Playwright (TypeScript), Page Object Model |
 | Test Reporting | Allure (`allure-playwright`) |
+| Performance | k6 smoke test with SLO thresholds (nightly + on every push) |
+| Security | `helmet` response headers on the API, nginx security headers on the SPA, OWASP ZAP baseline scan in CI |
+| Containers | Docker Compose full stack (MySQL 8 + Express API + nginx-served SPA) |
 | CI/CD | GitHub Actions — MySQL service container, cross-browser matrix (Chromium / Firefox / WebKit), Allure + Playwright HTML reports (with traces) published to GitHub Pages |
 | Also included | A Cypress example spec, for comparison |
 | Dev tooling | `concurrently` (run API + frontend together), `vite preview` for a production-build test target |
@@ -263,7 +266,7 @@ meridian-tests/
       initDb.js               `npm run db:init` entry point
       db.js                  mysql2 pool
       asyncHandler.js        wraps every route so DB/API errors can't crash the server
-      middleware/auth.js     JWT bearer-token verification
+      middleware/auth.js     JWT bearer-token verification (helmet security headers in index.js)
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
@@ -276,7 +279,13 @@ meridian-tests/
   vite.config.js             dev + preview proxy: /api -> localhost:4000
   .github/workflows/ci.yml   GitHub Actions pipeline (Chromium/Firefox/WebKit matrix)
   .github/workflows/perf.yml k6 performance smoke with SLOs
+  .github/workflows/security.yml            Docker Compose stack + OWASP ZAP baseline scan
+  .github/workflows/ai-test-design.yml      manual workflow: qa-test-case-agent draft test cases
   perf/                      k6 script + SLO documentation
+  ai-test-design/            user stories + notes on AI-assisted test design
+  docker-compose.yml         full stack in one command (db + api + web)
+  Dockerfile.web, nginx.conf SPA image: Vite build served by nginx, /api proxied, security headers
+  server/Dockerfile          API image
   FORM_VALIDATION_REPORT.md  senior-QA-level form validation review, live-verified
 ```
 
