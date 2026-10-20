@@ -476,7 +476,9 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   `@fontsource` packages. That also let the CSP drop every external origin (`style-src 'self'; font-src 'self'`)
   and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 84-test suite passes against the
   nginx-served build under this CSP on Chromium, with the fonts loading and no CSP violations logged
-  (checked locally); the next ZAP run is the independent confirmation.
+  (checked locally). **Final ZAP baseline: 10 -> 4 -> 2 alerts**, both Informational: "Modern Web Application"
+  (a note that the page is a SPA) and "Storable but Non-Cacheable Content" (the intended `no-cache`). No
+  Medium or Low alerts remain. This is a passive baseline scan of the SPA only, not a penetration test.
 
 ## Selenium + Playwright
 
@@ -560,7 +562,7 @@ Documented rather than hidden, as any real QA process would:
   booking flow, and corresponding Playwright coverage)
 - Expand the Cypress example into a second full suite for cross-framework comparison
 - Add visual regression coverage for the mobile/desktop layout toggle
-- Triage whatever the next ZAP baseline reports after the font self-hosting
+- Extend the ZAP scan to the API (authenticated flows) and consider an active scan against a throwaway stack
 - Run the `qa-test-case-agent` workflow (needs API credit) and compare its draft cases with the hand-reviewed ones in `ai-test-design/`
 - Add a scheduled (nightly) run of the cross-browser e2e matrix (the k6 performance smoke already runs nightly)
 - Paginate `GET /api/medicines` (it returns the whole catalog; fine at this size, but the first endpoint to degrade as it grows)
