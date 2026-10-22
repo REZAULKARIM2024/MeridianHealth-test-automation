@@ -1,0 +1,1 @@
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":7,"doctor":{"id":"d3","name":"Dr. Elena Petrova","specialty":"Dermatology","rating":"4.7"},"slot":"10:30 AM","reason":null}

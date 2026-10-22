@@ -1,0 +1,4 @@
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":3,"doctor":{"id":"d1","name":"Dr. Amara Osei","specialty":"Cardiology","rating":"4.9"},"slot":"9:00 AM","reason":null}
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":4,"doctor":{"id":"d2","name":"Dr. Rajiv Nair","specialty":"General Physician","rating":"4.8"},"slot":"8:30 AM","reason":null}
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":5,"doctor":{"id":"d3","name":"Dr. Elena Petrova","specialty":"Dermatology","rating":"4.7"},"slot":"10:30 AM","reason":null}
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":6,"doctor":{"id":"d4","name":"Dr. Marcus Webb","specialty":"Psychiatry","rating":"4.9"},"slot":"9:30 AM","reason":null}

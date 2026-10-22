@@ -1,0 +1,1 @@
+[bookFirstAvailable] POST /api/appointments -> 201: {"id":2,"doctor":{"id":"d1","name":"Dr. Amara Osei","specialty":"Cardiology","rating":"4.9"},"slot":"9:00 AM","reason":null}

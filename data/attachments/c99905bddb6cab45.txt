@@ -1,0 +1,1 @@
+[pharmacy beforeEach] GET /api/medicines -> 200: [{"id":"m1","name":"Amoxicillin 500mg","price":12.5,"rx_required":1,"stock":24,"rx":true},{"id":"m4","name":"Cetirizine 10mg","price":4.5,"rx_required":0,"stock":80,"rx":false},{"id":"m2","name":"Ibup

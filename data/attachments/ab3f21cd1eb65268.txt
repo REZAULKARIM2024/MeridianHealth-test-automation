@@ -1,0 +1,130 @@
+=== Step 1: goto ===
+=== Step 2: signup ===
+[API RESPONSE] GET http://localhost:5173/api/medicines -> 200
+[API RESPONSE BODY] [{"id":"m1","name":"Amoxicillin 500mg","price":12.5,"rx_required":1,"stock":24,"rx":true},{"id":"m4","name":"Cetirizine 10mg","price":4.5,"rx_required":0,"stock":80,"rx":false},{"id":"m2","name":"Ibuprofen 200mg","price":6.2,"rx_required":0,"stock":120,"rx":false},{"id":"m3","name":"Metformin 500mg","price":9.8,"rx_required":1,"stock":0,"rx":true},{"id":"m5","name":"Omeprazole 20mg","price":11,"rx_required":1,"stock":15,"rx":true},{"id":"m6","name":"Vitamin D3 1000IU","price":8,"rx_required":0,"
+[API RESPONSE] GET http://localhost:5173/api/doctors -> 200
+[API RESPONSE BODY] [{"id":"d1","name":"Dr. Amara Osei","specialty":"Cardiology","rating":"4.9","slots":["9:00 AM","11:30 AM","2:00 PM","4:30 PM"]},{"id":"d3","name":"Dr. Elena Petrova","specialty":"Dermatology","rating":"4.7","slots":["10:30 AM","12:00 PM","3:00 PM"]},{"id":"d4","name":"Dr. Marcus Webb","specialty":"Psychiatry","rating":"4.9","slots":["9:30 AM","1:30 PM","4:00 PM"]},{"id":"d2","name":"Dr. Rajiv Nair","specialty":"General Physician","rating":"4.8","slots":["8:30 AM","10:00 AM","1:00 PM","5:30 PM"]}
+[API RESPONSE] POST http://localhost:5173/api/auth/signup -> 201
+[API RESPONSE BODY] {"user":{"id":16,"name":"Debug User","email":"debug.1792652516211.3703@example.com"},"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6MTYsIm5hbWUiOiJEZWJ1ZyBVc2VyIiwiZW1haWwiOiJkZWJ1Zy4xNzkyNjUyNTE2MjExLjM3MDNAZXhhbXBsZS5jb20iLCJpYXQiOjE3OTI2NTI1MTYsImV4cCI6MTc5MzI1NzMxNn0.ulAuvdouejvE42AetAB_iijj1lKZOro0obldkrJdGBU"}
+PAGE TEXT AFTER SIGNUP: Mobile
+Desktop
+Hi, Debug
+
+Book a doctor
+
+Telehealth in minutes
+
+Order medicine
+
+0 items in cart
+
+Find a trial
+
+Get matched by condition
+
+Home
+Book
+Pharmacy
+Trials
+Profile
+
+Demo healthcare app backed by a real MySQL database via the API in server/ — signup/login, telehealth booking, pharmacy checkout
+=== Step 3: go to Book tab ===
+PAGE TEXT AFTER NAV: Mobile
+Desktop
+Book a doctor
+
+Dr. Amara Osei
+
+Cardiology
+
+4.9
+
+Dr. Elena Petrova
+
+Dermatology
+
+4.7
+
+Dr. Marcus Webb
+
+Psychiatry
+
+4.9
+
+Dr. Rajiv Nair
+
+General Physician
+
+4.8
+Home
+Book
+Pharmacy
+Trials
+Profile
+
+Demo healthcare app backed by a real MySQL database via the API in server/ — signup/login, t
+=== Step 4: click doctor d1 ===
+PAGE TEXT AFTER DOCTOR CLICK: Mobile
+Desktop
+Dr. Amara Osei
+
+Cardiology · 4.9★
+
+Choose a time
+
+9:00 AM
+11:30 AM
+2:00 PM
+4:30 PM
+Reason for visit (optional)
+Book appointment
+Home
+Book
+Pharmacy
+Trials
+Profile
+
+Demo healthcare app backed by a real MySQL database via the API in server/ — signup/login, telehealth booking, pharmacy ch
+=== Step 5: click slot 9:00 AM ===
+PAGE TEXT AFTER SLOT CLICK: Mobile
+Desktop
+Dr. Amara Osei
+
+Cardiology · 4.9★
+
+Choose a time
+
+9:00 AM
+11:30 AM
+2:00 PM
+4:30 PM
+Reason for visit (optional)
+Book appointment
+Home
+Book
+Pharmacy
+Trials
+Profile
+
+Demo healthcare app backed by a real MySQL database via the API in server/ — signup/login, telehealth booking, pharmacy ch
+=== Step 6: click Book appointment ===
+[API RESPONSE] POST http://localhost:5173/api/appointments -> 201
+[API RESPONSE BODY] {"id":8,"doctor":{"id":"d1","name":"Dr. Amara Osei","specialty":"Cardiology","rating":"4.9"},"slot":"9:00 AM","reason":null}
+PAGE TEXT AFTER BOOK CLICK: Mobile
+Desktop
+Appointment
+
+Appointment confirmed
+
+Dr. Amara Osei · 9:00 AM
+
+Back to home
+Home
+Book
+Pharmacy
+Trials
+Profile
+
+Demo healthcare app backed by a real MySQL database via the API in server/ — signup/login, telehealth booking, pharmacy checkout, and clinical trial matching all persist server-side.
+=== DONE ===
