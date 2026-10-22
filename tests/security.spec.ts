@@ -175,3 +175,40 @@ test.describe("Authentication & input hardening", () => {
     });
   }
 });
+
+test.describe("Password policy & brute-force protection", () => {
+  for (const weak of ["12345678", "abcdefgh", "password", "ABCDEFGH"]) {
+    test(`SEC-18 signup rejects the weak password "${weak}"`, async ({ request }) => {
+      const res = await request.post("/api/auth/signup", {
+        data: { name: "Weak Pw", email: uniqueEmail("sec18"), password: weak },
+      });
+      expect(res.status()).toBe(400);
+    });
+  }
+
+  test("SEC-19 repeated wrong passwords lock that account (429) without affecting other accounts", async ({ request }) => {
+    const email = uniqueEmail("sec19");
+    const other = uniqueEmail("sec19-other");
+    for (const e of [email, other]) {
+      await request.post("/api/auth/signup", { data: { name: "Lock Test", email: e, password: "SecurePass1" } });
+    }
+    for (let i = 0; i < 5; i++) {
+      const bad = await request.post("/api/auth/login", { data: { email, password: "WrongPass99" } });
+      expect(bad.status()).toBe(401);
+    }
+    // locked: even the correct password is refused while the lock lasts
+    const locked = await request.post("/api/auth/login", { data: { email, password: "SecurePass1" } });
+    expect(locked.status()).toBe(429);
+    // a different account is unaffected
+    const fine = await request.post("/api/auth/login", { data: { email: other, password: "SecurePass1" } });
+    expect(fine.status()).toBe(200);
+  });
+
+  test("SEC-20 failed attempts against an unknown email lock too, so the lock reveals nothing", async ({ request }) => {
+    const ghost = uniqueEmail("sec20-ghost");
+    for (let i = 0; i < 5; i++) {
+      expect((await request.post("/api/auth/login", { data: { email: ghost, password: "WrongPass99" } })).status()).toBe(401);
+    }
+    expect((await request.post("/api/auth/login", { data: { email: ghost, password: "WrongPass99" } })).status()).toBe(429);
+  });
+});
