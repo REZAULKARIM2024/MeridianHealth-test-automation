@@ -45,6 +45,10 @@ app.use("/api/trials", trialsRoutes);
 
 // Central error handler — keeps unhandled errors from leaking stack traces.
 app.use((err, req, res, next) => {
+  // Client errors raised by middleware (e.g. malformed JSON from express.json) are 4xx, not 500.
+  if (err.status >= 400 && err.status < 500) {
+    return res.status(err.status).json({ error: "Invalid request." });
+  }
   console.error(err);
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });

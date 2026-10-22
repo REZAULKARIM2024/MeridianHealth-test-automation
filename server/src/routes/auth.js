@@ -16,8 +16,12 @@ function sign(user) {
   );
 }
 
+// Wrong-typed JSON fields (numbers, objects, arrays) used to reach .trim()/bcrypt and surface as a 500.
+const allStrings = (...vals) => vals.every((v) => v === undefined || typeof v === "string");
+
 router.post("/signup", asyncHandler(async (req, res) => {
   const { name, email, password } = req.body || {};
+  if (!allStrings(name, email, password)) return res.status(400).json({ error: "Name, email and password must be text." });
   if (!name?.trim()) return res.status(400).json({ error: "Enter your full name." });
   // users.name is VARCHAR(120) in the schema — check this before hitting the
   // database, so a too-long name gets a clean 400 instead of falling through
@@ -44,6 +48,7 @@ router.post("/signup", asyncHandler(async (req, res) => {
 
 router.post("/login", asyncHandler(async (req, res) => {
   const { email, password } = req.body || {};
+  if (!allStrings(email, password)) return res.status(400).json({ error: "Email and password must be text." });
   if (!email || !EMAIL_RE.test(email)) return res.status(400).json({ error: "Enter a valid email address." });
   if (!password) return res.status(400).json({ error: "Enter a password." });
 

@@ -65,7 +65,7 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **84 automated
+The point of the project is the QA process as much as the app itself: **95 automated
 Playwright tests across 13 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
@@ -95,7 +95,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 84 tests / 13 spec files"]
+    subgraph Tests["Test Automation — 95 tests / 13 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -270,7 +270,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 84 tests / 13 files
+  tests/                     Playwright spec files (TypeScript), 95 tests / 13 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -314,7 +314,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**84 tests across 13 spec files, currently 100% passing in CI:**
+**95 tests across 13 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -327,7 +327,7 @@ first-request compile latency as a source of flaky timing.
 | `accessibility.spec.ts` | Keyboard navigation, accessible names, focus visibility |
 | `performance_and_device.spec.ts` | Load time budget, network-drop tolerance, data reset |
 | `api.spec.ts` | Direct HTTP tests against the real backend — signup/login/doctors/medicines/booking/trial matching, plus the `name`-length boundary (`API-11`/`API-12`) |
-| `security.spec.ts` | Unauthorized access, tampered/forged JWTs, SQL-injection and XSS safety, security response headers |
+| `security.spec.ts` | Unauthorized access, tampered/forged/unsigned JWTs, SQL-injection and XSS safety, security response headers, no user enumeration or credential leaks, no mass assignment, malformed/wrong-typed input handling |
 | `story-criteria.spec.ts` | Acceptance criteria of the booking and pharmacy-Rx user stories (error messages, optional fields, per-user data isolation) |
 | `lifecycle.spec.ts` | Session behavior across a reload; browser Back/Forward and tab-visibility "interrupt" tests |
 | `debug-booking.spec.ts` | A diagnostic spec (network/console dump) used during development to isolate a timing issue in the booking flow — kept in the suite as a template for future debugging |
@@ -382,7 +382,7 @@ its own parallel job (`fail-fast: false`):
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs only that job's Playwright browser.
-5. Runs the full 84-test suite against a production build
+5. Runs the full 95-test suite against a production build
    (`npm run test:e2e -- --project=<browser>`).
 6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
    raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
@@ -474,7 +474,7 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   which cleared that alert. The next scan then flagged the Google Fonts `<link>` (Sub Resource Integrity
   missing, and SRI is not possible for that stylesheet), so the fonts are now **self-hosted** with
   `@fontsource` packages. That also let the CSP drop every external origin (`style-src 'self'; font-src 'self'`)
-  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 84-test suite passes against the
+  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 95-test suite passes against the
   nginx-served build under this CSP on Chromium, with the fonts loading and no CSP violations logged
   (checked locally). **Final ZAP baseline: 10 -> 4 -> 2 alerts**, both Informational: "Modern Web Application"
   (a note that the page is a SPA) and "Storable but Non-Cacheable Content" (the intended `no-cache`). No
@@ -547,6 +547,17 @@ Documented rather than hidden, as any real QA process would:
   asserts the root cause (history length and state unchanged across screens), which is
   identical in Chromium, Firefox and WebKit. A real, minor UX gap worth fixing in the
   app itself (e.g. adopting a router that reflects screens in the URL).
+- **Resolved - wrong-typed or malformed JSON turned into HTTP 500 (`SEC-16`, `SEC-17`,
+  `tests/security.spec.ts`).** Found while extending the auth/security tests: a malformed JSON
+  body, or a signup/login field sent as a number, object or array (for example
+  `{"password": 12345678}`), reached `.trim()`/bcrypt and came back as a generic 500 instead of a
+  client error - the same class as the earlier over-long-name bug. The tests failed against the
+  old server (5 red) and pass after the fix: auth routes now return 400 when a field is not text,
+  and the central error handler passes through 4xx errors raised by middleware (such as body-parser)
+  instead of rewriting them to 500. The other new tests (`SEC-11`..`SEC-15`) passed first time and
+  lock in behaviour that was already correct: identical login failure for wrong password vs unknown
+  email, no password/hash in responses, rejected unsigned and payload-tampered tokens, and ignored
+  `id`/`role` fields on signup.
 
 ## Roadmap
 

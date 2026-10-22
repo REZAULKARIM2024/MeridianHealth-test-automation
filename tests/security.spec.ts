@@ -99,3 +99,79 @@ test.describe("Security response headers", () => {
     expect(h["x-powered-by"]).toBeUndefined();
   });
 });
+
+test.describe("Authentication & input hardening", () => {
+  const json = { "Content-Type": "application/json" };
+
+  test("SEC-11 login failure is identical for a wrong password and an unknown email (no user enumeration)", async ({ request }) => {
+    const email = uniqueEmail("sec11");
+    await request.post("/api/auth/signup", { data: { name: "Enum Test", email, password: "SecurePass1" } });
+    const wrongPw = await request.post("/api/auth/login", { data: { email, password: "WrongPass99" } });
+    const noUser = await request.post("/api/auth/login", {
+      data: { email: uniqueEmail("sec11-nobody"), password: "WrongPass99" },
+    });
+    expect(wrongPw.status()).toBe(401);
+    expect(noUser.status()).toBe(401);
+    expect(await wrongPw.json()).toEqual(await noUser.json());
+  });
+
+  test("SEC-12 auth responses never expose the password or its hash", async ({ request }) => {
+    const email = uniqueEmail("sec12");
+    const signup = await request.post("/api/auth/signup", { data: { name: "Leak Test", email, password: "SecurePass1" } });
+    const login = await request.post("/api/auth/login", { data: { email, password: "SecurePass1" } });
+    for (const res of [signup, login]) {
+      const body = await res.text();
+      expect(body).not.toMatch(/password|\$2[aby]\$/i);
+    }
+  });
+
+  test("SEC-13 an unsigned (alg=none) token is rejected", async ({ request }) => {
+    const b64 = (o: object) => Buffer.from(JSON.stringify(o)).toString("base64url");
+    const unsigned = `${b64({ alg: "none", typ: "JWT" })}.${b64({ id: 1, name: "x", email: "x@x.co" })}.`;
+    const res = await request.get("/api/appointments/me", { headers: { Authorization: `Bearer ${unsigned}` } });
+    expect(res.status()).toBe(401);
+  });
+
+  test("SEC-14 a valid token with a tampered payload (privilege swap) is rejected", async ({ request }) => {
+    const signup = await request.post("/api/auth/signup", {
+      data: { name: "Tamper Test", email: uniqueEmail("sec14"), password: "SecurePass1" },
+    });
+    const [h, , sig] = (await signup.json()).token.split(".");
+    const forgedPayload = Buffer.from(JSON.stringify({ id: 1, name: "Admin", email: "admin@example.com" })).toString("base64url");
+    const res = await request.get("/api/appointments/me", {
+      headers: { Authorization: `Bearer ${h}.${forgedPayload}.${sig}` },
+    });
+    expect(res.status()).toBe(401);
+  });
+
+  test("SEC-15 extra signup fields (id, role) are ignored - no mass assignment", async ({ request }) => {
+    const res = await request.post("/api/auth/signup", {
+      data: { name: "Mass Assign", email: uniqueEmail("sec15"), password: "SecurePass1", id: 1, role: "admin" },
+    });
+    expect(res.status()).toBe(201);
+    const { user, token } = await res.json();
+    expect(user.id).not.toBe(1);
+    expect(user.role).toBeUndefined();
+    const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
+    expect(payload.role).toBeUndefined();
+    expect(payload.id).toBe(user.id);
+  });
+
+  test("SEC-16 a malformed JSON body gets a clean 400, not a 500", async ({ request }) => {
+    const res = await request.post("/api/auth/login", { headers: json, data: "{bad json" });
+    expect(res.status()).toBe(400);
+  });
+
+  for (const [label, path, body] of [
+    ["login: password as object", "/api/auth/login", { email: "a@b.co", password: { x: 1 } }],
+    ["login: password as number", "/api/auth/login", { email: "a@b.co", password: 12345678 }],
+    ["signup: name as number", "/api/auth/signup", { name: 123, email: "a@b.co", password: "SecurePass1" }],
+    ["signup: password as number", "/api/auth/signup", { name: "x", email: "a@b.co", password: 12345678 }],
+    ["signup: password as array", "/api/auth/signup", { name: "x", email: "a@b.co", password: ["SecurePass1"] }],
+  ] as const) {
+    test(`SEC-17 wrong-typed JSON field is a 400, not a 500 (${label})`, async ({ request }) => {
+      const res = await request.post(path, { data: body });
+      expect(res.status()).toBe(400);
+    });
+  }
+});
