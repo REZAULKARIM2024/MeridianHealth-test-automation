@@ -65,7 +65,7 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **101 automated
+The point of the project is the QA process as much as the app itself: **102 automated
 Playwright tests across 13 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
@@ -95,7 +95,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 101 tests / 13 spec files"]
+    subgraph Tests["Test Automation — 102 tests / 13 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -270,7 +270,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 101 tests / 13 files
+  tests/                     Playwright spec files (TypeScript), 102 tests / 13 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -314,7 +314,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**101 tests across 13 spec files, currently 100% passing in CI:**
+**102 tests across 13 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -382,7 +382,7 @@ its own parallel job (`fail-fast: false`):
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs only that job's Playwright browser.
-5. Runs the full 101-test suite against a production build
+5. Runs the full 102-test suite against a production build
    (`npm run test:e2e -- --project=<browser>`).
 6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
    raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
@@ -474,7 +474,7 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   which cleared that alert. The next scan then flagged the Google Fonts `<link>` (Sub Resource Integrity
   missing, and SRI is not possible for that stylesheet), so the fonts are now **self-hosted** with
   `@fontsource` packages. That also let the CSP drop every external origin (`style-src 'self'; font-src 'self'`)
-  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 101-test suite passes against the
+  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 102-test suite passes against the
   nginx-served build under this CSP on Chromium, with the fonts loading and no CSP violations logged
   (checked locally). **Final ZAP baseline: 10 -> 4 -> 2 alerts**, both Informational: "Modern Web Application"
   (a note that the page is a SPA) and "Storable but Non-Cacheable Content" (the intended `no-cache`). No
@@ -569,6 +569,15 @@ Documented rather than hidden, as any real QA process would:
   behind several instances), per-account lockout lets someone deliberately lock another user out for the
   window, and the signup form's own client-side hint still says "At least 8 characters" - the stricter
   rule is enforced by the server and shown to the user as its error message.
+- **Resolved - `npm run db:init` wiped the time slots of every bulk-seeded doctor (`API-13`).**
+  `seed.sql` started with `DELETE FROM doctor_slots;` and then re-inserted slots only for the four base
+  doctors, so on a database that also held the optional bulk data (300 doctors) each `db:init` left the
+  other doctors listed with `"slots": []` - visible in the booking list but impossible to book. Found
+  while reading a local test run's API output. Reproduced against the database (2 slots before, 0 after),
+  fixed by limiting the delete to `d1`..`d4` (2 slots before and after, base slots still exactly 4 after
+  repeated runs), and locked in by `API-13`, which asserts every listed doctor has at least one slot.
+  CI never showed it because the CI database only holds the four base doctors. To restore slots on an
+  existing local database, re-run the optional bulk seed.
 
 ## Roadmap
 

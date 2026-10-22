@@ -128,4 +128,13 @@ test.describe("API-integrated", () => {
     });
     expect(res.status()).toBe(201);
   });
+  test("API-13 every listed doctor has at least one bookable slot", async ({ request }) => {
+    // Guards the seed: re-running `npm run db:init` once wiped the slots of every doctor
+    // except d1..d4 (the bulk-seeded ones), leaving them listed but impossible to book.
+    const doctors = await (await request.get("/api/doctors")).json();
+    expect(doctors.length).toBeGreaterThan(0);
+    for (const d of doctors) {
+      expect(d.slots.length, `${d.id} (${d.name}) has no slots`).toBeGreaterThan(0);
+    }
+  });
 });

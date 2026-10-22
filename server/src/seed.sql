@@ -8,9 +8,11 @@ INSERT INTO doctors (id, name, specialty, rating) VALUES
 ON DUPLICATE KEY UPDATE name = VALUES(name);
 
 -- doctor_slots has a UNIQUE (doctor_id, slot_label) key (uq_doctor_slot), so
--- duplicates are impossible; the table is still cleared and reinserted so the
--- base seed always matches this file exactly.
-DELETE FROM doctor_slots;
+-- duplicates are impossible. Only the base doctors' slots are cleared and
+-- reinserted so this seed matches this file exactly; slots of any other doctor
+-- (e.g. the optional bulk seed) are left alone. A plain DELETE FROM doctor_slots
+-- used to wipe them on every `npm run db:init`.
+DELETE FROM doctor_slots WHERE doctor_id IN ('d1','d2','d3','d4');
 INSERT INTO doctor_slots (doctor_id, slot_label) VALUES
   ('d1','9:00 AM'), ('d1','11:30 AM'), ('d1','2:00 PM'), ('d1','4:30 PM'),
   ('d2','8:30 AM'), ('d2','10:00 AM'), ('d2','1:00 PM'), ('d2','5:30 PM'),
