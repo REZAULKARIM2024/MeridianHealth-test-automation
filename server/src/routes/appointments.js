@@ -4,10 +4,16 @@ import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../asyncHandler.js";
 
 const router = Router();
+const MAX_REASON = 500;
 
 router.post("/", requireAuth, asyncHandler(async (req, res) => {
   const { doctorId, slot, reason } = req.body || {};
   if (!doctorId || !slot) return res.status(400).json({ error: "Select a time slot to continue." });
+  // Type guard: ids/slots must be plain strings (arrays/objects/numbers are rejected, not coerced).
+  const reasonOk = reason === undefined || reason === null || (typeof reason === "string" && reason.length <= MAX_REASON);
+  if (typeof doctorId !== "string" || typeof slot !== "string" || !reasonOk) {
+    return res.status(400).json({ error: "Invalid request." });
+  }
 
   const doctor = (await query("SELECT * FROM doctors WHERE id = :doctorId", { doctorId }))[0];
   if (!doctor) return res.status(404).json({ error: "Doctor not found." });

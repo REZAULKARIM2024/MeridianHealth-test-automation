@@ -65,7 +65,7 @@ flow is backed by a real MySQL database through a real Express API — nothing i
 mocked or stubbed, so the automation suite is exercising the same code path a real
 user would hit.
 
-The point of the project is the QA process as much as the app itself: **102 automated
+The point of the project is the QA process as much as the app itself: **123 automated
 Playwright tests across 13 spec files** — UI flows, direct API/security testing, and
 app-lifecycle/browser-navigation behavior — driven through a Page Object Model,
 running green in CI on every push. A real production bug, a real CI-only flake, a real
@@ -95,7 +95,7 @@ flowchart TB
     AsyncHandler --> Auth
     AsyncHandler --> DB
 
-    subgraph Tests["Test Automation — 102 tests / 13 spec files"]
+    subgraph Tests["Test Automation — 123 tests / 13 spec files"]
         UI["UI flows (Playwright + POM)<br/>smoke, auth, booking, pharmacy, trials,<br/>navigation, accessibility, performance"]
         API["Direct API/Security tests<br/>(no browser — request fixture)"]
         Lifecycle["App Lifecycle & Interrupt tests<br/>(reload, browser Back/Forward, tab visibility)"]
@@ -270,7 +270,7 @@ meridian-tests/
       routes/                auth, doctors, medicines, appointments, orders, trials
       index.js               Express app, listens on :4000
     .env.example
-  tests/                     Playwright spec files (TypeScript), 102 tests / 13 files
+  tests/                     Playwright spec files (TypeScript), 123 tests / 13 files
   pages/                     Page Object Model — AuthPage, NavPage, BookPage,
                               PharmacyPage, TrialsPage
   playwright.config.ts       primary config — serial workers, retries, HTML + Allure reporters
@@ -314,7 +314,7 @@ This runs the `pretest:e2e` hook first (`vite build`), so tests run against a re
 production build served via `vite preview` — not the dev server — which removes
 first-request compile latency as a source of flaky timing.
 
-**102 tests across 13 spec files, currently 100% passing in CI:**
+**123 tests across 13 spec files, currently 100% passing in CI:**
 
 | File | Covers |
 |---|---|
@@ -327,7 +327,7 @@ first-request compile latency as a source of flaky timing.
 | `accessibility.spec.ts` | Keyboard navigation, accessible names, focus visibility |
 | `performance_and_device.spec.ts` | Load time budget, network-drop tolerance, data reset |
 | `api.spec.ts` | Direct HTTP tests against the real backend — signup/login/doctors/medicines/booking/trial matching, plus the `name`-length boundary (`API-11`/`API-12`) |
-| `security.spec.ts` | Unauthorized access, tampered/forged/unsigned JWTs, SQL-injection and XSS safety, security response headers, no user enumeration or credential leaks, no mass assignment, malformed/wrong-typed input handling, password policy, per-account login lockout |
+| `security.spec.ts` | Unauthorized access, tampered/forged/unsigned JWTs, SQL-injection and XSS safety, security response headers, no user enumeration or credential leaks, no mass assignment, malformed/wrong-typed input handling on auth, appointments and orders, password policy, per-account login lockout, injection/XSS on login, name and trial endpoints, per-user trial-interest privacy |
 | `story-criteria.spec.ts` | Acceptance criteria of the booking and pharmacy-Rx user stories (error messages, optional fields, per-user data isolation) |
 | `lifecycle.spec.ts` | Session behavior across a reload; browser Back/Forward and tab-visibility "interrupt" tests |
 | `debug-booking.spec.ts` | A diagnostic spec (network/console dump) used during development to isolate a timing issue in the booking flow — kept in the suite as a template for future debugging |
@@ -382,7 +382,7 @@ its own parallel job (`fail-fast: false`):
 2. Installs root + server dependencies, writes a CI-specific `server/.env`.
 3. Initializes the database schema + seed data (`npm run db:init`).
 4. Installs only that job's Playwright browser.
-5. Runs the full 102-test suite against a production build
+5. Runs the full 123-test suite against a production build
    (`npm run test:e2e -- --project=<browser>`).
 6. Uploads per-browser artifacts, even on failure: the Playwright HTML report (traces),
    raw Allure results, and - on failure - raw `test-results/` (screenshots, traces,
@@ -474,7 +474,7 @@ proxies `/api` to it, so the Playwright suite can run against the compose stack 
   which cleared that alert. The next scan then flagged the Google Fonts `<link>` (Sub Resource Integrity
   missing, and SRI is not possible for that stylesheet), so the fonts are now **self-hosted** with
   `@fontsource` packages. That also let the CSP drop every external origin (`style-src 'self'; font-src 'self'`)
-  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 102-test suite passes against the
+  and allowed `Cross-Origin-Embedder-Policy: require-corp`. The full 123-test suite passes against the
   nginx-served build under this CSP on Chromium, with the fonts loading and no CSP violations logged
   (checked locally). **Final ZAP baseline: 10 -> 4 -> 2 alerts**, both Informational: "Modern Web Application"
   (a note that the page is a SPA) and "Storable but Non-Cacheable Content" (the intended `no-cache`). No
@@ -578,6 +578,17 @@ Documented rather than hidden, as any real QA process would:
   repeated runs), and locked in by `API-13`, which asserts every listed doctor has at least one slot.
   CI never showed it because the CI database only holds the four base doctors. To restore slots on an
   existing local database, re-run the optional bulk seed.
+
+- **Resolved - orders and appointments trusted client types, and split order lines could oversell stock (`SEC-21`..`SEC-23`).**
+  Extending the wrong-typed-input tests to the remaining routes found four real defects: `null` items,
+  a numeric `address`, and a missing or non-numeric `qty` all produced HTTP 500; a fractional `qty`
+  (1.5) was accepted and priced; an array `doctorId` (`["d1"]`) was accepted and booked; and an object
+  `reason` was stored. Worst, two lines for the same medicine were each checked against stock on their
+  own, so a medicine with 24 in stock could be ordered 20 + 20 (reproduced: order accepted, stock driven
+  negative). Fixed with explicit type guards (strings, integer `qty` 1..99, `reason` up to 500
+  characters), and repeated lines for one medicine are merged before the stock check. Locked in by
+  `SEC-21`..`SEC-23`. Input-injection tests for login, name and trial endpoints (`SEC-24`..`SEC-27`) and
+  per-user trial-interest privacy (`SEC-28`, `SEC-29`) passed first time.
 
 ## Roadmap
 

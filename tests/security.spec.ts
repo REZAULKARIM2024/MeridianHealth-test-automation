@@ -212,3 +212,146 @@ test.describe("Password policy & brute-force protection", () => {
     expect((await request.post("/api/auth/login", { data: { email: ghost, password: "WrongPass99" } })).status()).toBe(429);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Input validation on appointments / orders, injection on auth + trials, trial isolation
+// ---------------------------------------------------------------------------
+async function newUser(request: any, prefix: string) {
+  const res = await request.post("/api/auth/signup", {
+    data: { name: "Sec User", email: uniqueEmail(prefix), password: "SecurePass1" },
+  });
+  expect(res.status()).toBe(201);
+  const { token } = await res.json();
+  return { Authorization: `Bearer ${token}` };
+}
+
+const goodShipping = { address: "1 Test Street", city: "Testville", zip: "12345" };
+
+test.describe("Input validation — appointments & orders", () => {
+  const badAppointments: [string, any][] = [
+    ["doctorId as array", { doctorId: ["d1"], slot: "9:00 AM" }],
+    ["doctorId as object", { doctorId: { a: 1 }, slot: "9:00 AM" }],
+    ["slot as number", { doctorId: "d1", slot: 900 }],
+    ["reason as object", { doctorId: "d1", slot: "9:00 AM", reason: { x: 1 } }],
+    ["reason over 500 characters", { doctorId: "d1", slot: "9:00 AM", reason: "a".repeat(501) }],
+  ];
+  for (const [label, data] of badAppointments) {
+    test(`SEC-21 booking rejects bad input with 400 (${label})`, async ({ request }) => {
+      const headers = await newUser(request, "sec21");
+      const res = await request.post("/api/appointments", { headers, data });
+      expect(res.status()).toBe(400);
+    });
+  }
+
+  const badOrders: [string, any][] = [
+    ["items contains null", { items: [null], ...goodShipping }],
+    ["item is a bare string", { items: ["m2"], ...goodShipping }],
+    ["qty is a string", { items: [{ medicineId: "m2", qty: "abc" }], ...goodShipping }],
+    ["qty is fractional", { items: [{ medicineId: "m2", qty: 1.5 }], ...goodShipping }],
+    ["qty missing", { items: [{ medicineId: "m2" }], ...goodShipping }],
+    ["qty over the per-line cap", { items: [{ medicineId: "m2", qty: 100 }], ...goodShipping }],
+    ["medicineId as object", { items: [{ medicineId: { a: 1 }, qty: 1 }], ...goodShipping }],
+    ["address as number", { items: [{ medicineId: "m2", qty: 1 }], ...goodShipping, address: 5 }],
+    ["zip as number", { items: [{ medicineId: "m2", qty: 1 }], ...goodShipping, zip: 12345 }],
+  ];
+  for (const [label, data] of badOrders) {
+    test(`SEC-22 order rejects bad input with 400, not 500 (${label})`, async ({ request }) => {
+      const headers = await newUser(request, "sec22");
+      const res = await request.post("/api/orders", { headers, data });
+      expect(res.status()).toBe(400);
+    });
+  }
+
+  test("SEC-23 splitting one medicine across order lines cannot exceed its stock", async ({ request }) => {
+    const headers = await newUser(request, "sec23");
+    const list: any[] = await (await request.get("/api/medicines")).json();
+    const med = list.find((m) => !m.rx && m.stock >= 1 && m.stock <= 99);
+    test.skip(!med, "no non-Rx medicine with stock between 1 and 99");
+    const res = await request.post("/api/orders", {
+      headers,
+      data: {
+        items: [
+          { medicineId: med.id, qty: med.stock },
+          { medicineId: med.id, qty: med.stock },
+        ],
+        ...goodShipping,
+      },
+    });
+    expect(res.status()).toBe(409);
+    // and the stock was not touched by the rejected order
+    const after: any[] = await (await request.get("/api/medicines")).json();
+    expect(after.find((m) => m.id === med.id).stock).toBe(med.stock);
+  });
+});
+
+test.describe("Injection on auth, trials & profile fields", () => {
+  test("SEC-24 SQL-injection strings in login credentials never authenticate", async ({ request }) => {
+    const victim = uniqueEmail("sec24");
+    await request.post("/api/auth/signup", { data: { name: "Victim", email: victim, password: "SecurePass1" } });
+    const attempts = [
+      { email: "' OR '1'='1' --", password: "x" },
+      { email: victim, password: "' OR '1'='1" },
+      { email: `${victim}' --`, password: "SecurePass1" },
+    ];
+    for (const data of attempts) {
+      const res = await request.post("/api/auth/login", { data });
+      expect([400, 401]).toContain(res.status());
+      expect(JSON.stringify(await res.json())).not.toContain("token");
+    }
+  });
+
+  test("SEC-25 a SQL-injection payload in the name is stored literally and the schema survives", async ({ request }) => {
+    const name = "Robert'); DROP TABLE users;--";
+    const email = uniqueEmail("sec25");
+    const signup = await request.post("/api/auth/signup", { data: { name, email, password: "SecurePass1" } });
+    expect(signup.status()).toBe(201);
+    expect((await signup.json()).user.name).toBe(name);
+    // users table still exists and the account can log in
+    const login = await request.post("/api/auth/login", { data: { email, password: "SecurePass1" } });
+    expect(login.status()).toBe(200);
+  });
+
+  test("SEC-26 an XSS payload in the name is rendered as text, never executed", async ({ page }) => {
+    let dialogFired = false;
+    page.on("dialog", async (d) => {
+      dialogFired = true;
+      await d.dismiss();
+    });
+    const auth = new AuthPage(page);
+    await auth.goto();
+    await auth.signup("<img src=x onerror=alert(1)>", uniqueEmail("sec26"), "SecurePass1");
+    await expect(page.getByTestId("nav-book")).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(dialogFired).toBe(false);
+    expect(await page.locator("img[src='x']").count()).toBe(0);
+  });
+
+  test("SEC-27 trial match and interest endpoints treat injection strings as data", async ({ request }) => {
+    const match = await request.get("/api/trials/match?age=40&condition=" + encodeURIComponent("' OR 1=1 --"));
+    expect(match.status()).toBe(200);
+    expect(await match.json()).toHaveLength(0);
+
+    const headers = await newUser(request, "sec27");
+    const interest = await request.post("/api/trials/" + encodeURIComponent("t1' OR '1'='1") + "/interest", { headers });
+    expect(interest.status()).toBe(404);
+  });
+});
+
+test.describe("Authorization — trial interests are private", () => {
+  test("SEC-28 one user's trial interest is not visible to another user", async ({ request }) => {
+    const alice = await newUser(request, "sec28a");
+    const bob = await newUser(request, "sec28b");
+    expect((await request.post("/api/trials/t1/interest", { headers: alice })).status()).toBe(201);
+
+    const aliceList = await (await request.get("/api/trials/interests/me", { headers: alice })).json();
+    const bobList = await (await request.get("/api/trials/interests/me", { headers: bob })).json();
+    expect(aliceList).toContain("t1");
+    expect(bobList).not.toContain("t1");
+  });
+
+  test("SEC-29 interest in a trial that does not exist is a 404, not a crash", async ({ request }) => {
+    const headers = await newUser(request, "sec29");
+    const res = await request.post("/api/trials/does-not-exist/interest", { headers });
+    expect(res.status()).toBe(404);
+  });
+});

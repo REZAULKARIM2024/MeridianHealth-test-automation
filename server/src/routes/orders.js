@@ -4,15 +4,29 @@ import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler } from "../asyncHandler.js";
 
 const router = Router();
+const MAX_QTY = 99;
 
 router.post("/", requireAuth, asyncHandler(async (req, res) => {
-  const { items, address, city, zip, rxConfirmed } = req.body || {};
+  let { items, address, city, zip, rxConfirmed } = req.body || {};
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: "Your cart is empty." });
   }
+  // Type guards: every field must be the expected primitive; nothing is coerced.
+  const validItems = items.every(
+    (i) => i && typeof i === "object" && typeof i.medicineId === "string" && Number.isInteger(i.qty) && i.qty >= 1 && i.qty <= MAX_QTY
+  );
+  if (!validItems || [address, city, zip].some((v) => typeof v !== "string")) {
+    return res.status(400).json({ error: "Invalid request." });
+  }
+  if (address.length > 200 || city.length > 100) return res.status(400).json({ error: "Invalid request." });
   if (!address?.trim()) return res.status(400).json({ error: "Enter a shipping address." });
   if (!city?.trim()) return res.status(400).json({ error: "Enter a city." });
   if (!/^\d{4,6}$/.test(zip || "")) return res.status(400).json({ error: "Enter a valid ZIP/postal code." });
+
+  // Merge repeated lines for the same medicine so the stock check sees the true total.
+  const merged = new Map();
+  for (const i of items) merged.set(i.medicineId, (merged.get(i.medicineId) || 0) + i.qty);
+  items = [...merged].map(([medicineId, qty]) => ({ medicineId, qty }));
 
   const ids = items.map((i) => i.medicineId);
   const placeholders = ids.map(() => "?").join(",");
